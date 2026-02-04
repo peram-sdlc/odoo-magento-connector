@@ -1,0 +1,417 @@
+<odoo>
+    <record id="view_magento_instance_list" model="ir.ui.view">
+        <field name="name">magento.instance.list</field>
+        <field name="model">magento.instance</field>
+        <field name="arch" type="xml">
+            <list string="Magento Instances">
+                <field name="name"/>
+                <field name="base_url" />
+                <field name="active" />
+            </list>
+        </field>
+    </record>
+
+    <record id="view_magento_instance_form" model="ir.ui.view">
+        <field name="name">magento.instance.form</field>
+        <field name="model">magento.instance</field>
+        <field name="arch" type="xml">
+            <form string="Magento Instance">
+                <header>
+                    <button name="action_test_connection" type="object" string="Test Connection"
+                        class="btn-primary" />
+                        <button name="action_sync_products" type="object" string="Sync Products" />
+                        <button name="action_sync_categories" type="object" string="Sync Categories" />
+                        <button name="action_sync_customers" type="object" string="Sync Customers" />
+                        <button name="action_sync_orders" type="object" string="Sync Orders" />
+                        <button name="action_sync_attribute_sets" type="object" string="Sync Attribute Sets" />
+                </header>
+                <sheet>
+                    <group>
+                        <field name="name" />
+                        <field name="base_url" />
+                        <field name="access_token" />
+                        <field name="customer_default_password" password="True" />
+                        <field name="attribute_set_skeleton_id" />
+                        <field name="verify_ssl" />
+                        <field name="active" />
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_magento_product_map_list" model="ir.ui.view">
+        <field name="name">magento.product.map.list</field>
+        <field name="model">magento.product.map</field>
+        <field name="arch" type="xml">
+            <list string="Magento Products">
+                <field name="instance_id" />
+                <field name="magento_id" />
+                <field name="sku" />
+                <field name="name" />
+                <field name="price" />
+                <field name="status" />
+                <field name="visibility" />
+            </list>
+        </field>
+    </record>
+
+    <record id="view_magento_product_map_form" model="ir.ui.view">
+        <field name="name">magento.product.map.form</field>
+        <field name="model">magento.product.map</field>
+        <field name="arch" type="xml">
+            <form string="Magento Product">
+                <header>
+                    <button name="action_create_magento_product" type="object"
+                        string="Create in Magento" class="btn-primary" />
+                    <button name="action_update_magento_product" type="object"
+                        string="Update in Magento" />
+                    <button name="action_pull_magento_product" type="object"
+                        string="Pull from Magento" />
+                    <button name="action_sync_attribute_sets" type="object"
+                        string="Sync Attribute Sets" />
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <label for="name" class="oe_edit_only" />
+                        <h1>
+                            <field name="name" placeholder="e.g. Cheese Burger" />
+                        </h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="image_1920" widget="image" class="oe_avatar" options="{'size': (128, 128)}" />
+                            <field name="sku" />
+                            <field name="instance_id" />
+                            <field name="magento_id" readonly="1" />
+                            <field name="status" />
+                            <field name="country_of_manufacturer_id" />
+                            <field name="magento_parent_category_id" />
+                        </group>
+                        <group>
+                            <field name="enable_product" widget="boolean_toggle" />
+                            <field name="attribute_set_id"
+                                domain="[('instance_id', '=', instance_id), ('active', '=', True)]"
+                                context="{'default_instance_id': instance_id}" />
+                            <field name="price" />
+                            <field name="tax_class" />
+                            <field name="status" />
+                            <field name="visibility" />
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="General Information">
+                            <group>
+                                <field name="short_description" />
+                                <field name="quantity" />
+                                <field name="stock_status" />
+                                <field name="weight" />
+                                <field name="has_weight" />
+                                <field name="new_from_date" />
+                                <field name="new_to_date" />
+                            </group>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_magento_category_list" model="ir.ui.view">
+        <field name="name">magento.category.list</field>
+        <field name="model">magento.category</field>
+        <field name="arch" type="xml">
+            <list string="Magento Categories">
+                <field name="instance_id" />
+                <field name="magento_id" />
+                <field name="name" />
+                <field name="parent_id" />
+                <field name="is_active" />
+            </list>
+        </field>
+    </record>
+
+    <record id="view_magento_category_form" model="ir.ui.view">
+        <field name="name">magento.category.form</field>
+        <field name="model">magento.category</field>
+        <field name="arch" type="xml">
+            <form string="Magento Category">
+                <header>
+                    <button name="action_create_magento_category" type="object"
+                        string="Create in Magento" class="btn-primary" />
+                </header>
+                <sheet>
+                    <group>
+                        <field name="instance_id" />
+                        <field name="magento_id" readonly="1" />
+                        <field name="name" />
+                        <field name="parent_id" />
+                        <field name="is_active" />
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_magento_order_list" model="ir.ui.view">
+        <field name="name">magento.order.list</field>
+        <field name="model">magento.order</field>
+        <field name="arch" type="xml">
+            <list string="Magento Orders">
+                <field name="instance_id" />
+                <field name="increment_id" string="ID"/>
+                <field name="status" />
+                <field name="grand_total" />
+                <field name="currency" />
+                <field name="customer_email" />
+                <field name="created_at" />
+            </list>
+        </field>
+    </record>
+
+    <record id="view_magento_order_form" model="ir.ui.view">
+        <field name="name">magento.order.form</field>
+        <field name="model">magento.order</field>
+        <field name="arch" type="xml">
+            <form string="Magento Order">
+                <header>
+                    <button name="action_create_magento_order" type="object"
+                        string="Create in Magento" class="btn-primary" />
+                    <button name="action_update_magento_order" type="object"
+                        string="Update in Magento" />
+                    <button name="action_pull_magento_order" type="object"
+                        string="Pull from Magento" />
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <label for="increment_id" class="oe_edit_only" string="ID" />
+                        <h1>
+                            <field name="increment_id" placeholder="e.g. 100000123" />
+                        </h1>
+                    </div>
+
+                    <group col="4">
+                        <group>
+                            <field name="customer_id" />
+                            <field name="customer_email" />
+                            <field name="status" />
+                            <field name="created_at" />
+                            <field name="updated_at" />
+                        </group>
+                        <group>
+                            <field name="grand_total" />
+                            <field name="currency" />
+                        </group>
+                    </group>
+
+                    <separator string="Magento" />
+                    <group col="4">
+                        <group>
+                            <field name="instance_id" />
+                        </group>
+                        <group>
+                            <field name="magento_id" readonly="1" />
+                        </group>
+                    </group>
+
+                    <notebook>
+                        <page string="Order Lines">
+                            <field name="order_line_ids">
+                                <list editable="bottom">
+                                    <field name="sku" />
+                                    <field name="product_id" />
+                                    <field name="name" />
+                                    <field name="quantity" />
+                                    <field name="price_unit" />
+                                    <field name="subtotal" readonly="1" />
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_magento_instance" model="ir.actions.act_window">
+        <field name="name">Magento Instances</field>
+        <field name="res_model">magento.instance</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <record id="action_magento_product_map" model="ir.actions.act_window">
+        <field name="name">Magento Products</field>
+        <field name="res_model">magento.product.map</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <record id="action_magento_category" model="ir.actions.act_window">
+        <field name="name">Magento Categories</field>
+        <field name="res_model">magento.category</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <record id="action_magento_order" model="ir.actions.act_window">
+        <field name="name">Magento Orders</field>
+        <field name="res_model">magento.order</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <record id="view_magento_customer_list" model="ir.ui.view">
+        <field name="name">magento.customer.list</field>
+        <field name="model">magento.customer</field>
+        <field name="arch" type="xml">
+            <list string="Magento Customers">
+                <field name="magento_id" />
+                <field name="instance_id" />
+                 <field name="name" />
+                <field name="email" />
+                <field name="phone" />
+                <field name="city" />
+                <field name="region" string="State/Province" />
+            </list>
+        </field>
+    </record>
+
+    <record id="view_magento_customer_form" model="ir.ui.view">
+        <field name="name">magento.customer.form</field>
+        <field name="model">magento.customer</field>
+        <field name="arch" type="xml">
+            <form string="Magento Customer">
+                <header>
+                    <button name="action_create_magento_customer" type="object"
+                        string="Create in Magento" class="btn-primary" />
+                    <button name="action_update_magento_customer" type="object"
+                        string="Update in Magento" />
+                    <button name="action_pull_magento_customer" type="object"
+                        string="Pull from Magento" />
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <label for="name" class="oe_edit_only" />
+                        <h1>
+                            <field name="name" placeholder="e.g. Brandon Freeman" />
+                        </h1>
+                    </div>
+                    <group col="2">
+                        <group>
+                            <field name="instance_id" />
+                            <field name="magento_id" readonly="1" />
+                            <field name="prefix" />
+                            <field name="firstname" />
+                            <field name="middlename" />
+                            <field name="lastname" />
+                            <field name="suffix" />
+                            <field name="email" />
+                            <field name="phone" />
+                            <field name="dob" />
+                            <field name="taxvat" />
+                            <field name="gender" />
+                        </group>
+                        <group>
+                            <field name="vat_id" string="VAT Number" />
+                            <field name="send_welcome_email_from" string="Send Welcome Email" widget="radio" />
+                            <field name="default_billing" string="Default Billing Address" widget="radio" />
+                            <field name="default_shipping" string="Default Shipping Address" />
+                            <field name="company" />
+                            <field name="street" />
+                            <field name="city" />
+                            <field name="region" string="State/Province" />
+                            <field name="postcode" string="Zip/Postal Code" />
+                            <field name="country_id" />
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_magento_customer" model="ir.actions.act_window">
+        <field name="name">Magento Customers</field>
+        <field name="res_model">magento.customer</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <record id="view_magento_sync_report_list" model="ir.ui.view">
+        <field name="name">magento.sync.report.list</field>
+        <field name="model">magento.sync.report</field>
+        <field name="arch" type="xml">
+            <list string="Magento Sync Reports">
+                <field name="synced_at" string="Created On" />
+                <field name="instance_id" string="Magento Instance" />
+                <field name="sync_type" string="Sync Type" />
+                <field name="mode" string="Mode" />
+                <field name="source_action" string="Source Action" />
+                <field name="total_records" string="Total Records" />
+                <field name="success" string="Success" />
+                <field name="errors" string="Errors" />
+                <field name="start_time" string="Start Time" />
+                <field name="end_time" string="End Time" />
+            </list>
+        </field>
+    </record>
+
+    <record id="view_magento_sync_report_form" model="ir.ui.view">
+        <field name="name">magento.sync.report.form</field>
+        <field name="model">magento.sync.report</field>
+        <field name="arch" type="xml">
+            <form string="Magento Sync Report">
+                <sheet>
+                    <group>
+                        <field name="synced_at" />
+                        <field name="instance_id" />
+                        <field name="sync_type" />
+                        <field name="mode" />
+                        <field name="source_action" />
+                        <field name="total_records" />
+                        <field name="success" />
+                        <field name="errors" />
+                        <field name="start_time" />
+                        <field name="end_time" />
+                    </group>
+                    <group string="Categories">
+                        <field name="categories_created" />
+                        <field name="categories_updated" />
+                    </group>
+                    <group string="Products / Inventory">
+                        <field name="products_created" />
+                        <field name="products_updated" />
+                        <field name="inventory_updated" />
+                    </group>
+                    <group string="Orders">
+                        <field name="orders_created" />
+                        <field name="orders_updated" />
+                    </group>
+                    <group string="Customers">
+                        <field name="customers_created" />
+                        <field name="customers_updated" />
+                    </group>
+                    <group string="Notes">
+                        <field name="notes" />
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_magento_sync_report" model="ir.actions.act_window">
+        <field name="name">Magento Sync Reports</field>
+        <field name="res_model">magento.sync.report</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <menuitem id="menu_magento_root" name="Magento" />
+    <menuitem id="menu_magento_instance" name="Instances" parent="menu_magento_root"
+        action="action_magento_instance" />
+    <menuitem id="menu_magento_data" name="Magento Data" parent="menu_magento_root" />
+    <menuitem id="menu_magento_products" name="Products" parent="menu_magento_data"
+        action="action_magento_product_map" />
+    <menuitem id="menu_magento_categories" name="Categories" parent="menu_magento_data"
+        action="action_magento_category" />
+    <menuitem id="menu_magento_orders" name="Orders" parent="menu_magento_data"
+        action="action_magento_order" />
+    <menuitem id="menu_magento_customers" name="Customers" parent="menu_magento_data"
+        action="action_magento_customer" />
+    <menuitem id="menu_magento_reports" name="Reports" parent="menu_magento_root"
+        action="action_magento_sync_report" />
+</odoo>
