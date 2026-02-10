@@ -1,7 +1,12 @@
+import logging
+
 from odoo import models, fields
 from odoo.exceptions import UserError
 from ..services.magento_api import MagentoAPI
 import requests
+
+
+_logger = logging.getLogger(__name__)
 
 
 class MagentoInstance(models.Model):
@@ -22,6 +27,47 @@ class MagentoInstance(models.Model):
     customer_password_min_length = fields.Integer(
         string="Customer Password Min Length",
         default=8,
+    )
+    default_payment_method = fields.Char(
+        string="Default Payment Method Code",
+        help="Magento payment method code used when creating orders (e.g. checkmo, banktransfer).",
+    )
+    default_shipping_method = fields.Char(
+        string="Default Shipping Method Code",
+        help="Magento shipping method code used when creating orders (e.g. flatrate_flatrate).",
+    )
+    default_shipping_description = fields.Char(
+        string="Default Shipping Description",
+        help="Description shown on Magento orders (optional).",
+    )
+    default_shipping_amount = fields.Float(
+        string="Default Shipping Amount",
+        default=0.0,
+    )
+    auto_register_magento_payment = fields.Boolean(
+        string="Auto Register Magento Payments",
+        default=True,
+        help="When Magento shows an order as paid, register payments on the Odoo invoices.",
+    )
+    payment_journal_id = fields.Many2one(
+        "account.journal",
+        string="Payment Journal",
+        domain="[('type', 'in', ('bank', 'cash', 'credit'))]",
+        help="Journal used to register Magento payments in Odoo.",
+    )
+    payment_method_line_id = fields.Many2one(
+        "account.payment.method.line",
+        string="Payment Method",
+        help="Payment method used when registering Magento payments in Odoo.",
+    )
+    update_magento_status_on_paid = fields.Boolean(
+        string="Update Magento Status When Paid",
+        default=True,
+        help="When an Odoo invoice is paid, update the Magento order status.",
+    )
+    magento_paid_status = fields.Char(
+        string="Magento Paid Status Code",
+        help="Magento order status code to set when Odoo invoice is paid (e.g. complete).",
     )
     root_category_id = fields.Integer(string="Magento Root Category ID")
     attribute_set_skeleton_id = fields.Integer(
@@ -56,6 +102,23 @@ class MagentoInstance(models.Model):
             items.extend(self._flatten_categories(child, node.get("id")))
 
         return items
+
+    def _get_magento_payment_config(self, company):
+        self.ensure_one()
+        journal = self.payment_journal_id
+        if journal and journal.company_id and journal.company_id != company:
+            journal = False
+        if not journal:
+            journal = self.env["account.journal"].search([
+                ("type", "in", ("bank", "cash", "credit")),
+                ("company_id", "=", company.id),
+            ], limit=1)
+        method = self.payment_method_line_id
+        if method and journal and method not in journal.inbound_payment_method_line_ids:
+            method = False
+        if not method and journal:
+            method = journal.inbound_payment_method_line_ids[:1]
+        return journal, method
 
     # =====================
     # SYNC METHODS
@@ -330,7 +393,7 @@ class MagentoInstance(models.Model):
                     ) from exc
                 raise UserError(f"Magento API error: {exc}") from exc
 
-            order_model = self.env["magento.order"].with_context(skip_magento_sync=True)
+            order_model = self.env["sale.order"].with_context(skip_magento_sync=True)
 
             for data in orders:
                 magento_id = data.get("entity_id") or data.get("id")
@@ -338,19 +401,78 @@ class MagentoInstance(models.Model):
                     continue
 
                 order = order_model.search([
-                    ("instance_id", "=", instance.id),
-                    ("magento_id", "=", str(magento_id)),
+                    ("magento_order_id", "=", str(magento_id)),
                 ], limit=1)
 
-                values = order_model._apply_magento_data(data)
-                values["instance_id"] = instance.id
+                values = order_model._magento_prepare_order_vals(data, instance)
+                if values.get("magento_invoice_state") == "not_invoiced":
+                    try:
+                        invoices = api.get_invoices(order_id=magento_id)
+                    except requests.exceptions.HTTPError as exc:
+                        _logger.warning(
+                            "Magento invoice lookup failed for order %s: %s",
+                            magento_id,
+                            exc,
+                        )
+                        invoices = []
+                    if invoices:
+                        total_invoiced, invoice_state = order_model._magento_compute_invoice_summary(
+                            data, invoices
+                        )
+                        if invoice_state != "not_invoiced":
+                            values["magento_total_invoiced"] = total_invoiced
+                            values["magento_invoice_state"] = invoice_state
 
                 if order:
                     order.write(values)
+                    order._magento_sync_order_lines(data)
                     updated += 1
                 else:
-                    order_model.create(values)
+                    order = order_model.create(values)
+                    order._magento_sync_order_lines(data)
                     created += 1
+                if order.magento_invoice_state in ("partial", "invoiced"):
+                    try:
+                        order._magento_sync_invoices(api)
+                    except Exception as exc:
+                        _logger.warning(
+                            "Magento invoice sync failed for order %s: %s",
+                            order.name,
+                            exc,
+                        )
+                if order.magento_payment_state in ("partial", "paid"):
+                    try:
+                        order._magento_apply_payments_from_magento()
+                    except Exception as exc:
+                        _logger.warning(
+                            "Magento payment sync failed for order %s: %s",
+                            order.name,
+                            exc,
+                        )
+                try:
+                    order._magento_sync_credit_memos(api)
+                except Exception as exc:
+                    _logger.warning(
+                        "Magento credit memo sync failed for order %s: %s",
+                        order.name,
+                        exc,
+                    )
+                try:
+                    order._magento_sync_shipments(api)
+                except Exception as exc:
+                    _logger.warning(
+                        "Magento shipment sync failed for order %s: %s",
+                        order.name,
+                        exc,
+                    )
+                try:
+                    order._magento_push_shipments()
+                except Exception as exc:
+                    _logger.warning(
+                        "Magento shipment push failed for order %s: %s",
+                        order.name,
+                        exc,
+                    )
             total_created += created
             total_updated += updated
         return {

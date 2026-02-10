@@ -123,11 +123,81 @@ class MagentoAPI:
     def get_order(self, order_id):
         return self._get(f"/rest/V1/orders/{order_id}")
 
+    def get_invoices(self, order_id=None):
+        if order_id:
+            params = {
+                "searchCriteria[filter_groups][0][filters][0][field]": "order_id",
+                "searchCriteria[filter_groups][0][filters][0][value]": str(order_id),
+                "searchCriteria[filter_groups][0][filters][0][condition_type]": "eq",
+            }
+        else:
+            params = {"searchCriteria": ""}
+        return self._get("/rest/V1/invoices", params=params).get("items", [])
+
+    def get_invoice(self, invoice_id):
+        return self._get(f"/rest/V1/invoices/{invoice_id}")
+
+    def get_credit_memos(self, order_id=None):
+        if order_id:
+            params = {
+                "searchCriteria[filter_groups][0][filters][0][field]": "order_id",
+                "searchCriteria[filter_groups][0][filters][0][value]": str(order_id),
+                "searchCriteria[filter_groups][0][filters][0][condition_type]": "eq",
+            }
+        else:
+            params = {"searchCriteria": ""}
+        return self._get("/rest/V1/creditmemos", params=params).get("items", [])
+
+    def get_credit_memo(self, credit_memo_id):
+        return self._get(f"/rest/V1/creditmemo/{credit_memo_id}")
+
+    def get_shipments(self, order_id=None):
+        if order_id:
+            params = {
+                "searchCriteria[filter_groups][0][filters][0][field]": "order_id",
+                "searchCriteria[filter_groups][0][filters][0][value]": str(order_id),
+                "searchCriteria[filter_groups][0][filters][0][condition_type]": "eq",
+            }
+        else:
+            params = {"searchCriteria": ""}
+        return self._get("/rest/V1/shipments", params=params).get("items", [])
+
+    def get_shipment(self, shipment_id):
+        return self._get(f"/rest/V1/shipment/{shipment_id}")
+
     def create_order(self, payload):
         return self._post("/rest/V1/orders", payload)
 
     def update_order(self, order_id, payload):
         return self._put(f"/rest/V1/orders/{order_id}", payload)
+
+    def create_invoice(self, order_id, payload):
+        return self._post(f"/rest/V1/order/{order_id}/invoice", payload)
+
+    def create_credit_memo(self, order_id, payload):
+        return self._post(f"/rest/V1/order/{order_id}/refund", payload)
+
+    def create_shipment(self, order_id, payload):
+        return self._post(f"/rest/V1/order/{order_id}/ship", payload)
+
+    def create_guest_cart(self):
+        return self._post("/rest/V1/guest-carts")
+
+    def add_guest_cart_item(self, cart_id, sku, qty):
+        payload = {
+            "cartItem": {
+                "quote_id": cart_id,
+                "sku": sku,
+                "qty": qty,
+            }
+        }
+        return self._post(f"/rest/V1/guest-carts/{cart_id}/items", payload)
+
+    def set_guest_shipping_information(self, cart_id, payload):
+        return self._post(f"/rest/V1/guest-carts/{cart_id}/shipping-information", payload)
+
+    def set_guest_payment_information(self, cart_id, payload):
+        return self._post(f"/rest/V1/guest-carts/{cart_id}/payment-information", payload)
 
     def get_categories(self):
         return self._get("/rest/V1/categories")
@@ -175,6 +245,10 @@ class MagentoAPI:
 
     def update_customer(self, customer_id, payload):
         return self._put(f"/rest/V1/customers/{customer_id}", payload)
+
+    def get_country(self, country_code):
+        safe_code = quote(str(country_code or "").strip(), safe="")
+        return self._get(f"/rest/V1/directory/countries/{safe_code}")
     
     def get_websites(self):
         return self._get("/rest/V1/store/websites")

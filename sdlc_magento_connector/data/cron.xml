@@ -1,10 +1,24 @@
 <odoo>
-    <record id="cron_magento_product_sync" model="ir.cron">
-        <field name="name">Magento Product Sync</field>
-        <field name="model_id" ref="model_magento_instance"/>
-        <field name="state">code</field>
-        <field name="code">model.sync_products()</field>
-        <field name="interval_number">10</field>
-        <field name="interval_type">minutes</field>
-    </record>
+    <!--
+      Mark as noupdate so module upgrades don't try to rewrite cron records.
+      This avoids upgrade failures when a cron is currently running/locked.
+    -->
+    <data noupdate="1">
+        <record id="cron_magento_product_sync" model="ir.cron">
+            <field name="name">Magento Product Sync</field>
+            <field name="model_id" ref="model_magento_instance"/>
+            <field name="state">code</field>
+            <field name="code">model.sync_products()</field>
+            <field name="interval_number">10</field>
+            <field name="interval_type">minutes</field>
+        </record>
+        <record id="cron_magento_order_sync" model="ir.cron">
+            <field name="name">Magento Order Sync</field>
+            <field name="model_id" ref="model_magento_instance"/>
+            <field name="state">code</field>
+            <field name="code">model.sync_orders()</field>
+            <field name="interval_number">10</field>
+            <field name="interval_type">minutes</field>
+        </record>
+    </data>
 </odoo>

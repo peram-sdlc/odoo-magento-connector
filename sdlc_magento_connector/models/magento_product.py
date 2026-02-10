@@ -370,6 +370,38 @@ class MagentoProductMap(models.Model):
                         pass
             record.with_context(skip_magento_sync=True).write(values)
 
+    def action_refresh_inventory(self):
+        records = self
+        if not records:
+            domain = self.env.context.get("active_domain") or []
+            records = self.search(domain)
+        for record in records:
+            if not record.sku:
+                raise UserError("SKU is required to refresh inventory from Magento.")
+            api = MagentoAPI(record.instance_id)
+            try:
+                data = api.get_product(record.sku)
+            except requests.exceptions.HTTPError as exc:
+                record._raise_magento_http_error(exc)
+            stock_item = (data.get("extension_attributes") or {}).get("stock_item") or {}
+            if not stock_item:
+                continue
+            vals = {
+                "quantity": stock_item.get("qty", record.quantity or 0.0),
+                "stock_status": "in_stock" if stock_item.get("is_in_stock") else "out_of_stock",
+            }
+            record.with_context(skip_magento_sync=True, skip_odoo_sync=True).write(vals)
+        return {
+            "type": "ir.actions.client",
+            "tag": "display_notification",
+            "params": {
+                "title": "Inventory Refresh",
+                "message": f"Inventory refreshed for {len(records)} record(s).",
+                "type": "success",
+                "sticky": False,
+            },
+        }
+
     def action_open_magento_category(self):
         self.ensure_one()
         return {

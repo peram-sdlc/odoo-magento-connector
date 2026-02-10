@@ -3,7 +3,6 @@ from odoo.exceptions import UserError
 import requests
 from ..services.magento_api import MagentoAPI
 
-
 class MagentoAttributeSet(models.Model):
     _name = "magento.attribute.set"
     _description = "Magento Attribute Set"

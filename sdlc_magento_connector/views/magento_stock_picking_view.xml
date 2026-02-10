@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_stock_picking_form_magento" model="ir.ui.view">
+        <field name="name">stock.picking.form.magento.shipment</field>
+        <field name="model">stock.picking</field>
+        <field name="inherit_id" ref="stock.view_picking_form"/>
+        <field name="arch" type="xml">
+            <header position="inside">
+                <button name="action_push_shipment_to_magento"
+                        type="object"
+                        string="Push Shipment to Magento"
+                        class="oe_highlight"
+                        groups="stock.group_stock_user"
+                        invisible="picking_type_code != 'outgoing' or not magento_order_id or magento_shipment_id"/>
+            </header>
+
+            <xpath expr="//sheet" position="inside">
+                <group string="Magento Shipment" modifiers="{'invisible': [('magento_order_id','=',False)]}">
+                    <field name="magento_order_id" readonly="1"/>
+                    <field name="magento_increment_id" readonly="1"/>
+                    <field name="magento_shipment_increment_id" readonly="1"/>
+                    <field name="magento_shipment_id" readonly="1"/>
+                    <field name="magento_ship_date" readonly="1"/>
+                    <field name="magento_total_qty" readonly="1"/>
+                    <field name="magento_ship_to_name" readonly="1"/>
+                    <field name="magento_customer_email" readonly="1"/>
+                    <field name="magento_customer_phone" readonly="1"/>
+                </group>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="view_stock_picking_form_magento_hide_shopify" model="ir.ui.view">
+        <field name="name">stock.picking.form.magento.hide.shopify</field>
+        <field name="model">stock.picking</field>
+        <field name="inherit_id" ref="stock.view_picking_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//group[.//field[@name='shopify_order_id']]" position="attributes">
+                <attribute name="modifiers">{'invisible': [('magento_order_id','!=',False)]}</attribute>
+            </xpath>
+            <xpath expr="//button[@name='action_push_tracking_to_shopify']" position="attributes">
+                <attribute name="invisible">picking_type_code != 'outgoing' or not shopify_order_id or magento_order_id</attribute>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="view_stock_picking_form_magento_only" model="ir.ui.view">
+        <field name="name">stock.picking.form.magento.only</field>
+        <field name="model">stock.picking</field>
+        <field name="inherit_id" ref="stock.view_picking_form"/>
+        <field name="priority" eval="1000"/>
+        <field name="arch" type="xml">
+            <xpath expr="//button[@name='action_push_tracking_to_shopify']" position="replace"/>
+            <xpath expr="//group[.//field[@name='shopify_order_id']]" position="replace"/>
+        </field>
+    </record>
+</odoo>
