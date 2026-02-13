@@ -42,7 +42,16 @@ class MagentoCategory(models.Model):
                 category_vals["id"] = int(self.magento_id)
             except (TypeError, ValueError):
                 pass
-        return {"category": category_vals}
+        payload = {"category": category_vals}
+        # Apply user-defined field mappings on top of default payload.
+        self.env["magento.field.mapping"].sudo().apply_outbound_mapping_to_payload(
+            mapping_type="category",
+            instance=self.instance_id,
+            source_record=self,
+            payload=payload,
+            wrapper_key="category",
+        )
+        return payload
 
     def _apply_magento_data(self, data):
         vals = {
@@ -65,6 +74,14 @@ class MagentoCategory(models.Model):
             vals["parent_id"] = parent.id
         else:
             vals["parent_id"] = False
+
+        mapped_vals = self.env["magento.field.mapping"].sudo().apply_inbound_mapping_to_vals(
+            mapping_type="category",
+            instance=self.instance_id,
+            source_payload=data,
+        )
+        if mapped_vals:
+            vals.update(mapped_vals)
         return vals
 
     def _raise_magento_http_error(self, exc):
@@ -122,6 +139,7 @@ class MagentoCategory(models.Model):
                 magento_id = response.get("id")
                 if magento_id is not None:
                     record.write({"magento_id": str(magento_id)})
+        return self._rainbow_man_action(f"Created {len(self)} category(s) in Magento.")
 
     def action_update_magento_category(self):
         for record in self:
@@ -143,6 +161,7 @@ class MagentoCategory(models.Model):
             if isinstance(response, dict):
                 values = record._apply_magento_data(response)
                 record.with_context(skip_magento_sync=True).write(values)
+        return self._rainbow_man_action(f"Updated {len(self)} category(s) in Magento.")
 
     def action_pull_magento_category(self):
         for record in self:
@@ -155,11 +174,32 @@ class MagentoCategory(models.Model):
                 record._raise_magento_http_error(exc)
             values = record._apply_magento_data(data)
             record.with_context(skip_magento_sync=True).write(values)
+        return self._rainbow_man_action(f"Pulled {len(self)} category(s) from Magento.")
+
+    def _rainbow_man_action(self, message):
+        return {
+            "type": "ir.actions.act_window_close",
+            "effect": {
+                "fadeout": "slow",
+                "message": message,
+                "type": "rainbow_man",
+            }
+        }
 
     def write(self, vals):
         res = super().write(vals)
         if self.env.context.get("skip_magento_sync"):
             return res
+
+        magento_sync_fields = {"name", "is_active", "parent_id", "instance_id", "magento_id"}
+        mapped_sync_fields = set()
+        for inst in self.mapped("instance_id"):
+            mapped_sync_fields.update(
+                self.env["magento.field.mapping"].sudo().mapped_source_fields("category", inst)
+            )
+        if not (magento_sync_fields | mapped_sync_fields).intersection(vals.keys()):
+            return res
+
         for record in self:
             if not record.instance_id:
                 continue

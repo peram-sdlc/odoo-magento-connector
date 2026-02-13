@@ -4,6 +4,47 @@ from odoo.exceptions import UserError
 import requests
 from ..services.magento_api import MagentoAPI
 
+
+def _get_maps_for_products(products):
+    """Resolve Magento maps for product variants, with SKU fallback for orphan links."""
+    if not products:
+        return products.env["magento.product.map"]
+
+    map_model = products.env["magento.product.map"]
+    maps = map_model.search([("odoo_product_id", "in", products.ids)])
+    skus = [sku for sku in products.mapped("default_code") if sku]
+    if not skus:
+        return maps
+
+    sku_maps = map_model.search([("sku", "in", skus)])
+    products_by_sku = {}
+    ambiguous_skus = set()
+    for product in products:
+        sku = product.default_code
+        if not sku:
+            continue
+        if sku in products_by_sku and products_by_sku[sku].id != product.id:
+            ambiguous_skus.add(sku)
+            continue
+        products_by_sku.setdefault(sku, product)
+
+    # Backfill missing map->product links so future sync uses direct relation.
+    for mapping in sku_maps:
+        if mapping.odoo_product_id or not mapping.sku:
+            continue
+        if mapping.sku in ambiguous_skus:
+            continue
+        product = products_by_sku.get(mapping.sku)
+        if not product:
+            continue
+        mapping.with_context(skip_magento_sync=True, skip_odoo_sync=True).write({
+            "odoo_product_id": product.id,
+        })
+
+    maps |= sku_maps.filtered(lambda rec: rec.odoo_product_id and rec.odoo_product_id.id in products.ids)
+    return maps
+
+
 class MagentoProductMap(models.Model):
     _name = "magento.product.map"
     _description = "Magento Product Mapping"
@@ -26,7 +67,7 @@ class MagentoProductMap(models.Model):
         ],
         default="taxable_goods",
     )
-    tax_class_id = fields.Integer()
+    tax_class_id = fields.Integer(string="Tax Class ID")
     country_of_manufacturer_id = fields.Many2one(
         "res.country",
         string="Country of Manufacturer",
@@ -140,6 +181,27 @@ class MagentoProductMap(models.Model):
                 "qty": float(self.quantity or 0.0),
                 "is_in_stock": self.stock_status == "in_stock",
             }
+        # Apply user-defined field mappings on top of default payload.
+        self.env["magento.field.mapping"].sudo().apply_outbound_mapping_to_payload(
+            mapping_type="product",
+            instance=self.instance_id,
+            source_record=self,
+            payload=payload,
+            wrapper_key="product",
+        )
+        return payload
+
+    def _build_mapped_payload_only(self):
+        """Build payload with only mapped fields, to avoid full-product required fields."""
+        self.ensure_one()
+        payload = {"product": {}}
+        self.env["magento.field.mapping"].sudo().apply_outbound_mapping_to_payload(
+            mapping_type="product",
+            instance=self.instance_id,
+            source_record=self,
+            payload=payload,
+            wrapper_key="product",
+        )
         return payload
 
     def _get_custom_attribute(self, data, code):
@@ -298,6 +360,15 @@ class MagentoProductMap(models.Model):
         if stock_item:
             values["quantity"] = stock_item.get("qty", self.quantity or 0.0)
             values["stock_status"] = "in_stock" if stock_item.get("is_in_stock") else "out_of_stock"
+
+        # Apply mapped Magento fields back into Odoo model values.
+        mapped_vals = self.env["magento.field.mapping"].sudo().apply_inbound_mapping_to_vals(
+            mapping_type="product",
+            instance=self.instance_id,
+            source_payload=data,
+        )
+        if mapped_vals:
+            values.update(mapped_vals)
         return values
 
     def action_create_magento_product(self):
@@ -312,6 +383,7 @@ class MagentoProductMap(models.Model):
                 values = record._apply_magento_data(response)
                 record.with_context(skip_magento_sync=True).write(values)
                 record._sync_magento_image(api)
+        return self._rainbow_man_action(f"Created {len(self)} product(s) in Magento.")
 
     def action_update_magento_product(self):
         for record in self:
@@ -334,6 +406,26 @@ class MagentoProductMap(models.Model):
                 values = record._apply_magento_data(response)
                 record.with_context(skip_magento_sync=True).write(values)
                 record._sync_magento_image(api)
+        return self._rainbow_man_action(f"Updated {len(self)} product(s) in Magento.")
+
+    def action_update_magento_mapped_fields(self):
+        """Push only mapped fields to Magento product."""
+        for record in self:
+            if not record.sku:
+                continue
+            if not record.instance_id:
+                continue
+            payload = record._build_mapped_payload_only()
+            if not payload.get("product"):
+                continue
+            api = MagentoAPI(record.instance_id)
+            try:
+                response = api.update_product(record.sku, payload)
+            except requests.exceptions.HTTPError as exc:
+                record._raise_magento_http_error(exc)
+            if isinstance(response, dict):
+                values = record._apply_magento_data(response)
+                record.with_context(skip_magento_sync=True, skip_odoo_sync=True).write(values)
 
     def _raise_magento_http_error(self, exc):
         response = exc.response
@@ -346,6 +438,16 @@ class MagentoProductMap(models.Model):
             message = response.text
         status = response.status_code
         raise UserError(f"Magento API error ({status}): {message}") from exc
+
+    def _rainbow_man_action(self, message):
+        return {
+            "type": "ir.actions.act_window_close",
+            "effect": {
+                "fadeout": "slow",
+                "message": message,
+                "type": "rainbow_man",
+            }
+        }
 
     def action_pull_magento_product(self):
         for record in self:
@@ -369,6 +471,7 @@ class MagentoProductMap(models.Model):
                     except requests.exceptions.HTTPError:
                         pass
             record.with_context(skip_magento_sync=True).write(values)
+        return self._rainbow_man_action(f"Pulled {len(self)} product(s) from Magento.")
 
     def action_refresh_inventory(self):
         records = self
@@ -475,6 +578,10 @@ class MagentoProductMap(models.Model):
                     odoo_vals["default_code"] = record.sku
                 if "weight" in vals:
                     odoo_vals["weight"] = record.weight
+                if "price" in vals:
+                    odoo_vals["list_price"] = record.price
+                if "description" in vals:
+                    odoo_vals["description"] = record.description or ""
                 if "short_description" in vals:
                     odoo_vals["description_sale"] = record.short_description or ""
                 if "image_1920" in vals:
@@ -496,10 +603,19 @@ class ProductProduct(models.Model):
         res = super().write(vals)
         if self.env.context.get("skip_odoo_sync"):
             return res
-        sync_fields = {"name", "default_code", "weight", "active", "description_sale", "image_1920"}
+        sync_fields = {
+            "name",
+            "default_code",
+            "weight",
+            "active",
+            "list_price",
+            "description",
+            "description_sale",
+            "image_1920",
+        }
         if not sync_fields.intersection(vals.keys()):
             return res
-        maps = self.env["magento.product.map"].search([("odoo_product_id", "in", self.ids)])
+        maps = _get_maps_for_products(self)
         if not maps:
             return res
         for record in maps:
@@ -513,6 +629,59 @@ class ProductProduct(models.Model):
             if "active" in vals:
                 map_vals["enable_product"] = record.odoo_product_id.active
                 map_vals["status"] = "1" if record.odoo_product_id.active else "2"
+            if "list_price" in vals:
+                map_vals["price"] = record.odoo_product_id.lst_price
+            if "description" in vals:
+                map_vals["description"] = record.odoo_product_id.description or ""
+            if "description_sale" in vals:
+                map_vals["short_description"] = record.odoo_product_id.description_sale or ""
+            if "image_1920" in vals:
+                map_vals["image_1920"] = record.odoo_product_id.image_1920
+            if map_vals:
+                record.with_context(skip_odoo_sync=True).write(map_vals)
+        return res
+
+
+class ProductTemplate(models.Model):
+    _inherit = "product.template"
+
+    def write(self, vals):
+        res = super().write(vals)
+        if self.env.context.get("skip_odoo_sync"):
+            return res
+        sync_fields = {
+            "name",
+            "default_code",
+            "weight",
+            "active",
+            "list_price",
+            "description",
+            "description_sale",
+            "image_1920",
+        }
+        if not sync_fields.intersection(vals.keys()):
+            return res
+        variants = self.mapped("product_variant_ids")
+        if not variants:
+            return res
+        maps = _get_maps_for_products(variants)
+        if not maps:
+            return res
+        for record in maps:
+            map_vals = {}
+            if "name" in vals:
+                map_vals["name"] = record.odoo_product_id.name
+            if "default_code" in vals:
+                map_vals["sku"] = record.odoo_product_id.default_code
+            if "weight" in vals:
+                map_vals["weight"] = record.odoo_product_id.weight
+            if "active" in vals:
+                map_vals["enable_product"] = record.odoo_product_id.active
+                map_vals["status"] = "1" if record.odoo_product_id.active else "2"
+            if "list_price" in vals:
+                map_vals["price"] = record.odoo_product_id.lst_price
+            if "description" in vals:
+                map_vals["description"] = record.odoo_product_id.description or ""
             if "description_sale" in vals:
                 map_vals["short_description"] = record.odoo_product_id.description_sale or ""
             if "image_1920" in vals:

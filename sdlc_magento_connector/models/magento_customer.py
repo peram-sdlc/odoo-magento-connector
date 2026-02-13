@@ -113,6 +113,15 @@ class MagentoCustomer(models.Model):
                 address = None
             if address:
                 payload["customer"]["addresses"] = [address]
+
+        # Apply user-defined field mappings on top of default payload.
+        self.env["magento.field.mapping"].sudo().apply_outbound_mapping_to_payload(
+            mapping_type="customer",
+            instance=self.instance_id,
+            source_record=self,
+            payload=payload,
+            wrapper_key="customer",
+        )
         return payload
 
     def _build_magento_payload_minimal(self):
@@ -139,6 +148,14 @@ class MagentoCustomer(models.Model):
         store_id = self.store_id or self.instance_id.store_id
         if store_id:
             payload["customer"]["store_id"] = int(store_id)
+        # Keep mappings active even on minimal fallback payload.
+        self.env["magento.field.mapping"].sudo().apply_outbound_mapping_to_payload(
+            mapping_type="customer",
+            instance=self.instance_id,
+            source_record=self,
+            payload=payload,
+            wrapper_key="customer",
+        )
         return payload
 
     def _validate_default_password(self):
@@ -216,7 +233,7 @@ class MagentoCustomer(models.Model):
         country = False
         if country_code:
             country = self.env["res.country"].search([("code", "=", country_code)], limit=1)
-        return {
+        values = {
             "instance_id": instance_id,
             "magento_id": str(data.get("id") or ""),
             "email": data.get("email") or "",
@@ -262,6 +279,15 @@ class MagentoCustomer(models.Model):
             ),
             "default_shipping": bool(address.get("default_shipping")) if address else False,
         }
+        instance = self.env["magento.instance"].browse(instance_id)
+        mapped_vals = self.env["magento.field.mapping"].sudo().apply_inbound_mapping_to_vals(
+            mapping_type="customer",
+            instance=instance,
+            source_payload=data,
+        )
+        if mapped_vals:
+            values.update(mapped_vals)
+        return values
 
     def _raise_magento_http_error(self, exc):
         response = exc.response
@@ -289,6 +315,7 @@ class MagentoCustomer(models.Model):
                     record.with_context(skip_magento_sync=True).write({
                         "magento_id": str(response.get("id")),
                     })
+        return self._rainbow_man_action(f"Created {len(self)} customer(s) in Magento.")
 
     def action_update_magento_customer(self):
         for record in self:
@@ -340,6 +367,7 @@ class MagentoCustomer(models.Model):
                 )
                 values = record._extract_magento_values(response, record.instance_id.id)
                 record.with_context(skip_magento_sync=True).write(values)
+        return self._rainbow_man_action(f"Updated {len(self)} customer(s) in Magento.")
 
     def action_pull_magento_customer(self):
         for record in self:
@@ -352,6 +380,17 @@ class MagentoCustomer(models.Model):
                 record._raise_magento_http_error(exc)
             values = record._extract_magento_values(data, record.instance_id.id)
             record.with_context(skip_magento_sync=True).write(values)
+        return self._rainbow_man_action(f"Pulled {len(self)} customer(s) from Magento.")
+
+    def _rainbow_man_action(self, message):
+        return {
+            "type": "ir.actions.act_window_close",
+            "effect": {
+                "fadeout": "slow",
+                "message": message,
+                "type": "rainbow_man",
+            }
+        }
 
     def write(self, vals):
         vals = dict(vals or {})
@@ -368,8 +407,48 @@ class MagentoCustomer(models.Model):
             elif val in ("True", "False"):
                 vals["default_billing"] = "yes" if val == "True" else "no"
         res = super().write(vals)
+
         if self.env.context.get("skip_magento_sync"):
             return res
+
+        magento_sync_fields = {
+            "email",
+            "prefix",
+            "firstname",
+            "middlename",
+            "lastname",
+            "suffix",
+            "phone",
+            "group_id",
+            "website_id",
+            "store_id",
+            "disable_auto_group_change",
+            "allow_remote_shopping_assistance",
+            "dob",
+            "taxvat",
+            "gender",
+            "send_welcome_email_from",
+            "street",
+            "street2",
+            "city",
+            "region",
+            "postcode",
+            "country_id",
+            "company",
+            "vat_id",
+            "default_billing",
+            "default_shipping",
+            "instance_id",
+            "magento_id",
+        }
+        mapped_sync_fields = set()
+        for inst in self.mapped("instance_id"):
+            mapped_sync_fields.update(
+                self.env["magento.field.mapping"].sudo().mapped_source_fields("customer", inst)
+            )
+        if not (magento_sync_fields | mapped_sync_fields).intersection(vals.keys()):
+            return res
+
         for record in self:
             if not record.instance_id:
                 continue
@@ -452,6 +531,7 @@ class MagentoCustomer(models.Model):
                     clean["default_billing"] = "yes" if val == "True" else "no"
             clean_vals_list.append(clean)
         records = super().create(clean_vals_list)
+
         if records.env.context.get("skip_magento_sync"):
             return records
         for record in records:

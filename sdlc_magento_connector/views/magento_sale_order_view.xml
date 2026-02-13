@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-
     <record id="sale_order_form_magento" model="ir.ui.view">
         <field name="name">sale.order.form.magento</field>
         <field name="model">sale.order</field>
@@ -9,6 +8,7 @@
             <xpath expr="//form/sheet" position="inside">
                 <field name="is_magento_order" invisible="1"/>
             </xpath>
+
             <xpath expr="//form/header" position="inside">
                 <button name="action_create_magento_order"
                         type="object"
@@ -28,7 +28,7 @@
             </xpath>
 
             <xpath expr="//form/sheet/group" position="after">
-                <group string="Magento" modifiers="{'invisible': [['is_shopify_order','=',True]]}">
+                <group string="Magento" invisible="not is_magento_order">
                     <field name="magento_instance_id"/>
                     <field name="magento_order_id" readonly="1"/>
                     <field name="magento_increment_id" readonly="1"/>
@@ -46,51 +46,6 @@
         </field>
     </record>
 
-    <record id="view_sale_order_tree_magento_instance" model="ir.ui.view">
-        <field name="name">sale.order.tree.magento.instance</field>
-        <field name="model">sale.order</field>
-        <field name="inherit_id" ref="sale.view_order_tree"/>
-        <field name="arch" type="xml">
-            <xpath expr="//list/field[@name='name']" position="after">
-                <field name="magento_instance_id"/>
-            </xpath>
-        </field>
-    </record>
-
-    <record id="sale_order_form_magento_hide_shopify" model="ir.ui.view">
-        <field name="name">sale.order.form.magento.hide.shopify</field>
-        <field name="model">sale.order</field>
-        <field name="inherit_id" ref="sdlc_shopify_connector.sale_order_form_gift_card_line"/>
-        <field name="arch" type="xml">
-            <xpath expr="//button[@name='action_create_shopify_order']" position="attributes">
-                <attribute name="modifiers">{'invisible': ['|', ['shopify_order_id','!=',False], ['is_magento_order','=',True]]}</attribute>
-            </xpath>
-            <xpath expr="//button[@name='action_shopify_refund_and_restock']" position="attributes">
-                <attribute name="modifiers">{'invisible': ['|', ['shopify_order_id','=',False], ['is_magento_order','=',True]]}</attribute>
-            </xpath>
-            <xpath expr="//group[.//field[@name='shopify_order_id']]" position="attributes">
-                <attribute name="modifiers">{'invisible': [['is_magento_order','=',True]]}</attribute>
-            </xpath>
-            <xpath expr="//field[@name='order_line']/list/field[@name='gift_card_code']" position="attributes">
-                <attribute name="modifiers">{'invisible': [['parent.is_magento_order','=',True]]}</attribute>
-            </xpath>
-        </field>
-    </record>
-
-    <!-- Magento Orders: remove Shopify UI entirely -->
-    <record id="sale_order_form_magento_only" model="ir.ui.view">
-        <field name="name">sale.order.form.magento.only</field>
-        <field name="model">sale.order</field>
-        <field name="inherit_id" ref="sdlc_shopify_connector.sale_order_form_gift_card_line"/>
-        <field name="priority" eval="1000"/>
-        <field name="arch" type="xml">
-            <xpath expr="//button[@name='action_create_shopify_order']" position="replace"/>
-            <xpath expr="//button[@name='action_shopify_refund_and_restock']" position="replace"/>
-            <xpath expr="//group[.//field[@name='shopify_order_id']]" position="replace"/>
-            <xpath expr="//field[@name='order_line']/list/field[@name='gift_card_code']" position="replace"/>
-        </field>
-    </record>
-
     <record id="sale_order_form_magento_invoice_button" model="ir.ui.view">
         <field name="name">sale.order.form.magento.invoice.button</field>
         <field name="model">sale.order</field>
@@ -105,27 +60,52 @@
         </field>
     </record>
 
+    <record id="view_sale_order_tree_magento_instance" model="ir.ui.view">
+        <field name="name">sale.order.tree.magento.instance</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale.view_order_tree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//list/field[@name='name']" position="after">
+                <field name="magento_instance_id"/>
+            </xpath>
+        </field>
+    </record>
+
     <record id="view_sale_order_tree_magento_only" model="ir.ui.view">
         <field name="name">sale.order.tree.magento.only</field>
         <field name="model">sale.order</field>
-        <field name="inherit_id" ref="sdlc_shopify_connector.view_sale_order_tree_shopify_instance"/>
-        <field name="priority" eval="1000"/>
+        <field name="inherit_id" eval="False"/>
         <field name="arch" type="xml">
-            <!-- Hide the Import/Upload entry from the list view control panel. -->
-            <xpath expr="//list" position="attributes">
-                <attribute name="import">0</attribute>
-            </xpath>
-            <xpath expr="//list/field[@name='shopify_instance_id']" position="replace"/>
-            <xpath expr="//list/field[@name='activity_ids']" position="replace"/>
-            <xpath expr="//list/field[@name='company_id']" position="replace">
-                <field name="magento_status" string="Magento Status"/>
-            </xpath>
-            <xpath expr="//list" position="inside">
+            <list string="Magento Orders" import="0">
+                <field name="name"/>
+                <field name="date_order"/>
+                <field name="partner_id"/>
+                <field name="magento_order_id"/>
+                <field name="magento_increment_id"/>
+                <field name="magento_status"/>
+                <field name="magento_instance_id"/>
                 <field name="magento_invoice_state"/>
                 <field name="magento_total_invoiced"/>
                 <field name="magento_payment_state"/>
                 <field name="magento_total_paid"/>
-            </xpath>
+                <field name="delivery_status"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_sale_order_tree_magento_cancelled_report" model="ir.ui.view">
+        <field name="name">sale.order.tree.magento.cancelled.report</field>
+        <field name="model">sale.order</field>
+        <field name="arch" type="xml">
+            <list string="Magento Cancelled Orders" create="0" edit="0" delete="0" import="0">
+                <field name="name"/>
+                <field name="date_order"/>
+                <field name="magento_order_id"/>
+                <field name="magento_status"/>
+                <field name="magento_customer_email"/>
+                <field name="magento_payment_state"/>
+                <field name="state"/>
+            </list>
         </field>
     </record>
 </odoo>

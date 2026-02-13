@@ -234,6 +234,25 @@ class MagentoOrder(models.Model):
         carrier, method = code.split("_", 1)
         return carrier, method
 
+    def _get_line_sku_candidates(self, line):
+        candidates = [
+            line.magento_product_id.sku if line.magento_product_id else "",
+            line.sku or "",
+            line.product_id.default_code if line.product_id else "",
+        ]
+        cleaned = []
+        seen = set()
+        for sku in candidates:
+            value = str(sku or "").strip()
+            if not value:
+                continue
+            token = value.lower()
+            if token in seen:
+                continue
+            seen.add(token)
+            cleaned.append(value)
+        return cleaned
+
     def _create_order_via_cart(self, api):
         self.ensure_one()
         instance = self.instance_id
@@ -266,13 +285,38 @@ class MagentoOrder(models.Model):
 
         cart_id = api.create_guest_cart()
         for line in self.order_line_ids:
-            sku = line.sku or (line.product_id and line.product_id.default_code) or ""
-            if not sku:
+            sku_candidates = self._get_line_sku_candidates(line)
+            if not sku_candidates:
                 raise UserError("Each order line must have a SKU to create a Magento order.")
             qty = float(line.quantity or 0.0)
             if qty <= 0:
                 raise UserError("Each order line must have a quantity greater than 0.")
-            api.add_guest_cart_item(cart_id, sku, qty)
+            add_error = None
+            added = False
+            for sku in sku_candidates:
+                try:
+                    api.add_guest_cart_item(cart_id, sku, qty)
+                    if line.sku != sku:
+                        line.sku = sku
+                    added = True
+                    break
+                except requests.exceptions.HTTPError as exc:
+                    add_error = exc
+                    status = exc.response.status_code if exc.response is not None else 0
+                    message = (self._magento_http_error_message(exc) or "").lower()
+                    if status == 400 and "not available" in message:
+                        continue
+                    break
+            if added:
+                continue
+            if add_error:
+                error_message = self._magento_http_error_message(add_error)
+                if "not available" in (error_message or "").lower():
+                    raise UserError(
+                        "Magento product is not available for order line '%s'. Tried SKU(s): %s. %s"
+                        % (line.name or "(no name)", ", ".join(sku_candidates), error_message)
+                    )
+                self._raise_magento_http_error(add_error)
 
         shipping_address = self._build_cart_address(partner, api=api, include_email=True)
         billing_address = self._build_cart_address(partner, api=api, include_email=True)
@@ -501,10 +545,10 @@ class MagentoOrder(models.Model):
         if line_vals:
             self.with_context(skip_magento_sync=True).write({"order_line_ids": line_vals})
 
-    def _raise_magento_http_error(self, exc):
+    def _magento_http_error_message(self, exc):
         response = exc.response
         if response is None:
-            raise UserError(f"Magento API error: {exc}") from exc
+            return f"Magento API error: {exc}"
         try:
             payload = response.json()
             message = payload.get("message") or response.text
@@ -514,7 +558,10 @@ class MagentoOrder(models.Model):
         except Exception:
             message = response.text
         status = response.status_code
-        raise UserError(f"Magento API error ({status}): {message}") from exc
+        return f"Magento API error ({status}): {message}"
+
+    def _raise_magento_http_error(self, exc):
+        raise UserError(self._magento_http_error_message(exc)) from exc
 
     def _refresh_from_magento(self, api, magento_id):
         self.ensure_one()
@@ -528,6 +575,16 @@ class MagentoOrder(models.Model):
         self.with_context(skip_magento_sync=True).write(values)
         self._sync_order_lines(data)
 
+    def _rainbow_man_action(self, message):
+        return {
+            "type": "ir.actions.act_window_close",
+            "effect": {
+                "fadeout": "slow",
+                "message": message,
+                "type": "rainbow_man",
+            }
+        }
+
     def action_create_magento_order(self):
         for record in self:
             api = MagentoAPI(record.instance_id)
@@ -540,6 +597,7 @@ class MagentoOrder(models.Model):
                 record.with_context(skip_magento_sync=True).write(values)
                 if not response.get("increment_id") or not response.get("items"):
                     record._refresh_from_magento(api, values.get("magento_id"))
+        return self._rainbow_man_action(f"Created {len(self)} order(s) in Magento.")
 
     def action_update_magento_order(self):
         for record in self:
@@ -556,6 +614,7 @@ class MagentoOrder(models.Model):
                 record.with_context(skip_magento_sync=True).write(values)
                 if not response.get("increment_id") or not response.get("items"):
                     record._refresh_from_magento(api, record.magento_id)
+        return self._rainbow_man_action(f"Updated {len(self)} order(s) in Magento.")
 
     def action_pull_magento_order(self):
         for record in self:
@@ -569,6 +628,7 @@ class MagentoOrder(models.Model):
             values = record._apply_magento_data(data)
             record.with_context(skip_magento_sync=True).write(values)
             record._sync_order_lines(data)
+        return self._rainbow_man_action(f"Pulled {len(self)} order(s) from Magento.")
 
     def write(self, vals):
         res = super().write(vals)

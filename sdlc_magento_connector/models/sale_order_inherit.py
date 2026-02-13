@@ -64,13 +64,11 @@ class SaleOrder(models.Model):
     )
 
     @api.depends("magento_order_id", "magento_instance_id")
-    @api.depends_context("hide_shopify")
     def _compute_is_magento_order(self):
         for order in self:
             order.is_magento_order = bool(
                 order.magento_order_id
                 or order.magento_instance_id
-                or order._context.get("hide_shopify")
             )
 
     @api.depends("order_line.invoice_status", "state", "magento_invoice_state")
@@ -316,10 +314,19 @@ class SaleOrder(models.Model):
         if not invoice_id:
             return False
 
-        if self.env["account.move"].search(
+        existing_move = self.env["account.move"].search(
             [("magento_invoice_id", "=", str(invoice_id))], limit=1
-        ):
-            return False
+        )
+        if existing_move:
+            # If the invoice was created by a cron/admin user, Sales users won't see it due to
+            # Sale's record rule (invoice_user_id must be the current user or False).
+            if (
+                existing_move.invoice_user_id
+                and existing_move.create_uid
+                and existing_move.invoice_user_id.id == existing_move.create_uid.id
+            ):
+                existing_move.with_context(skip_magento_sync=True).write({"invoice_user_id": False})
+            return existing_move
 
         candidates = self.env["account.move"].search([
             ("move_type", "=", "out_invoice"),
@@ -352,6 +359,12 @@ class SaleOrder(models.Model):
                 invoice_ref = invoice_data.get("increment_id") or ""
                 if invoice_ref and not match.ref:
                     match.ref = invoice_ref
+                if (
+                    match.invoice_user_id
+                    and match.create_uid
+                    and match.invoice_user_id.id == match.create_uid.id
+                ):
+                    match.with_context(skip_magento_sync=True).write({"invoice_user_id": False})
                 return match
 
         items = invoice_data.get("items") or []
@@ -397,6 +410,10 @@ class SaleOrder(models.Model):
             "partner_id": (self.partner_invoice_id or self.partner_id).id,
             "invoice_origin": self.name,
             "invoice_date": invoice_date,
+            # Sales app users are restricted by Sale's "Personal Invoices" record rule
+            # (invoice_user_id = current user OR invoice_user_id is False). Magento sync
+            # typically runs via cron/admin; keep it unassigned so sales users can see it.
+            "invoice_user_id": False,
             "currency_id": self.currency_id.id,
             "company_id": self.company_id.id,
             "invoice_line_ids": line_vals,
@@ -453,10 +470,19 @@ class SaleOrder(models.Model):
         if not credit_id:
             return False
 
-        if self.env["account.move"].search(
+        existing_move = self.env["account.move"].search(
             [("magento_credit_memo_id", "=", str(credit_id))], limit=1
-        ):
-            return False
+        )
+        if existing_move:
+            if (
+                existing_move.invoice_user_id
+                and existing_move.create_uid
+                and existing_move.invoice_user_id.id == existing_move.create_uid.id
+            ):
+                existing_move.with_context(skip_magento_sync=True).write({"invoice_user_id": False})
+            # Backfill Magento totals (and keep them up to date) so amounts match Magento UI.
+            self._magento_update_credit_memo_amounts(existing_move, credit_data)
+            return existing_move
 
         items = credit_data.get("items") or []
         line_vals = []
@@ -501,6 +527,9 @@ class SaleOrder(models.Model):
             "partner_id": (self.partner_invoice_id or self.partner_id).id,
             "invoice_origin": self.name,
             "invoice_date": credit_date,
+            # Keep it unassigned so sales users can see Magento credit notes regardless
+            # of which user ran the sync job.
+            "invoice_user_id": False,
             "currency_id": self.currency_id.id,
             "company_id": self.company_id.id,
             "invoice_line_ids": line_vals,
@@ -516,6 +545,7 @@ class SaleOrder(models.Model):
             move.magento_credit_memo_created_at = fields.Datetime.to_datetime(
                 credit_data.get("created_at")
             )
+        self._magento_update_credit_memo_amounts(move, credit_data)
 
         try:
             move.with_context(skip_magento_sync=True).action_post()
@@ -526,6 +556,30 @@ class SaleOrder(models.Model):
                 exc,
             )
         return move
+
+    def _magento_update_credit_memo_amounts(self, move, credit_data):
+        """Persist Magento credit memo totals on account.move for display consistency."""
+        if not move or not credit_data:
+            return
+
+        def _to_float(v):
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return 0.0
+
+        vals = {
+            "magento_credit_memo_grand_total": _to_float(
+                credit_data.get("grand_total") or credit_data.get("base_grand_total")
+            ),
+            "magento_credit_memo_tax_amount": _to_float(
+                credit_data.get("tax_amount") or credit_data.get("base_tax_amount")
+            ),
+            "magento_credit_memo_subtotal": _to_float(
+                credit_data.get("subtotal") or credit_data.get("base_subtotal")
+            ),
+        }
+        move.with_context(skip_magento_sync=True).write(vals)
 
     def _magento_sync_credit_memos(self, api=None):
         self.ensure_one()
@@ -545,14 +599,23 @@ class SaleOrder(models.Model):
             credit_id = memo.get("entity_id") or memo.get("id")
             if not credit_id:
                 continue
-            if self.env["account.move"].search(
-                [("magento_credit_memo_id", "=", str(credit_id))], limit=1
-            ):
-                continue
             try:
                 credit_data = api.get_credit_memo(credit_id)
             except requests.exceptions.HTTPError:
                 credit_data = memo
+            existing = self.env["account.move"].search(
+                [("magento_credit_memo_id", "=", str(credit_id))], limit=1
+            )
+            if existing:
+                # Update totals even for existing moves so UI matches Magento.
+                self._magento_update_credit_memo_amounts(existing, credit_data)
+                if (
+                    existing.invoice_user_id
+                    and existing.create_uid
+                    and existing.invoice_user_id.id == existing.create_uid.id
+                ):
+                    existing.with_context(skip_magento_sync=True).write({"invoice_user_id": False})
+                continue
             self._magento_create_credit_memo_from_magento(credit_data)
 
     def _magento_apply_payments_from_magento(self):
@@ -766,17 +829,20 @@ class SaleOrder(models.Model):
     # -------------------------
     # MAGENTO API HELPERS
     # -------------------------
-    def _magento_raise_http_error(self, exc):
+    def _magento_http_error_message(self, exc):
         response = exc.response
         if response is None:
-            raise UserError(_("Magento API error: %s") % exc) from exc
+            return _("Magento API error: %s") % exc
         try:
             payload = response.json()
             message = payload.get("message") or response.text
         except Exception:
             message = response.text
         status = response.status_code
-        raise UserError(_("Magento API error (%s): %s") % (status, message)) from exc
+        return _("Magento API error (%s): %s") % (status, message)
+
+    def _magento_raise_http_error(self, exc):
+        raise UserError(self._magento_http_error_message(exc)) from exc
 
     def _magento_split_customer_name(self, partner):
         name = (partner.name or "").strip() if partner else ""
@@ -796,6 +862,113 @@ class SaleOrder(models.Model):
             )
         carrier, method = code.split("_", 1)
         return carrier, method
+
+    def _magento_extract_line_sku_hints(self, line):
+        hints = []
+        texts = [
+            line.magento_sku or "",
+            line.name or "",
+            line.display_name or "",
+            line.product_id.display_name if line.product_id else "",
+        ]
+        for text in texts:
+            value = str(text or "").strip()
+            if not value:
+                continue
+            if " - " in value:
+                prefix = value.split(" - ", 1)[0].strip()
+                if prefix and " " not in prefix:
+                    hints.append(prefix)
+            if "[" in value and "]" in value:
+                left = value.find("[")
+                right = value.find("]", left + 1)
+                if right > left:
+                    inside = value[left + 1:right].strip()
+                    if inside and " " not in inside:
+                        hints.append(inside)
+        cleaned = []
+        seen = set()
+        for hint in hints:
+            token = hint.lower()
+            if token in seen:
+                continue
+            seen.add(token)
+            cleaned.append(hint)
+        return cleaned
+
+    def _magento_resolve_line_product_map(self, line):
+        map_model = self.env["magento.product.map"].sudo()
+        instance = self.magento_instance_id or line.order_id.magento_instance_id
+        instance_domain = [("instance_id", "=", instance.id)] if instance else []
+
+        if line.magento_product_id:
+            if not instance or line.magento_product_id.instance_id.id == instance.id:
+                return line.magento_product_id
+
+        if line.product_id:
+            mapping = map_model.search(
+                instance_domain + [("odoo_product_id", "=", line.product_id.id)],
+                limit=1,
+            )
+            if mapping:
+                return mapping
+
+            for sku in [line.magento_sku, line.product_id.default_code, *self._magento_extract_line_sku_hints(line)]:
+                value = str(sku or "").strip()
+                if not value:
+                    continue
+                mapping = map_model.search(
+                    instance_domain + [("sku", "=", value)],
+                    limit=1,
+                )
+                if mapping:
+                    return mapping
+
+            template_maps = map_model.search(
+                instance_domain + [("odoo_product_id.product_tmpl_id", "=", line.product_id.product_tmpl_id.id)]
+            )
+            if len(template_maps) == 1:
+                return template_maps
+
+        for sku in [line.magento_sku, line.product_id.default_code if line.product_id else "", *self._magento_extract_line_sku_hints(line)]:
+            value = str(sku or "").strip()
+            if not value:
+                continue
+            mapping = map_model.search(
+                instance_domain + [("sku", "=", value)],
+                limit=1,
+            )
+            if mapping:
+                return mapping
+        return False
+
+    def _magento_get_line_sku_candidates(self, line):
+        mapping = self._magento_resolve_line_product_map(line)
+        if mapping:
+            if not line.magento_product_id or line.magento_product_id.id != mapping.id:
+                line.magento_product_id = mapping.id
+            if mapping.sku and line.magento_sku != mapping.sku:
+                line.magento_sku = mapping.sku
+
+        candidates = [
+            mapping.sku if mapping else "",
+            line.magento_product_id.sku if line.magento_product_id else "",
+            line.magento_sku or "",
+            *self._magento_extract_line_sku_hints(line),
+            line.product_id.default_code if line.product_id else "",
+        ]
+        cleaned = []
+        seen = set()
+        for sku in candidates:
+            value = str(sku or "").strip()
+            if not value:
+                continue
+            token = value.lower()
+            if token in seen:
+                continue
+            seen.add(token)
+            cleaned.append(value)
+        return cleaned
 
     def _magento_build_cart_address(self, partner, api=None, include_email=False):
         if not partner:
@@ -869,6 +1042,82 @@ class SaleOrder(models.Model):
             address["company"] = partner.company_name
         return address
 
+    def _magento_resolve_order_instance(self):
+        self.ensure_one()
+        if self.magento_instance_id:
+            return self.magento_instance_id
+
+        map_model = self.env["magento.product.map"].sudo()
+        resolved_instance_ids = set()
+
+        for line in self.order_line:
+            if line.magento_product_id and line.magento_product_id.instance_id:
+                resolved_instance_ids.add(line.magento_product_id.instance_id.id)
+                continue
+
+            if line.product_id:
+                maps = map_model.search([("odoo_product_id", "=", line.product_id.id)])
+                resolved_instance_ids.update(maps.mapped("instance_id").ids)
+
+            for sku in [line.magento_sku, line.product_id.default_code if line.product_id else ""]:
+                value = str(sku or "").strip()
+                if not value:
+                    continue
+                maps = map_model.search([("sku", "=", value)])
+                resolved_instance_ids.update(maps.mapped("instance_id").ids)
+
+        if len(resolved_instance_ids) == 1:
+            instance = self.env["magento.instance"].browse(next(iter(resolved_instance_ids)))
+            self.magento_instance_id = instance.id
+            return instance
+
+        if len(resolved_instance_ids) > 1:
+            raise UserError(
+                _(
+                    "Multiple Magento instances match the order lines. "
+                    "Please set Magento Instance on the order before creating in Magento."
+                )
+            )
+
+        active_instances = self.env["magento.instance"].search([("active", "=", True)])
+        if len(active_instances) == 1:
+            self.magento_instance_id = active_instances.id
+            return active_instances
+        return False
+
+    def _magento_is_not_saleable_error(self, exc):
+        status = exc.response.status_code if exc.response is not None else 0
+        if status != 400:
+            return False
+        message = (self._magento_http_error_message(exc) or "").lower()
+        saleable_markers = (
+            "not available",
+            "not saleable",
+            "not salable",
+            "out of stock",
+            "requested qty is not available",
+            "requested quantity is not available",
+        )
+        return any(marker in message for marker in saleable_markers)
+
+    def _magento_should_try_next_sku(self, exc):
+        status = exc.response.status_code if exc.response is not None else 0
+        message = (self._magento_http_error_message(exc) or "").lower()
+        if self._magento_is_not_saleable_error(exc):
+            return False
+        retry_markers = (
+            "doesn't exist",
+            "does not exist",
+            "requested doesn't exist",
+            "no such entity",
+            "product that was requested doesn't exist",
+        )
+        if status == 404:
+            return True
+        if status == 400 and any(marker in message for marker in retry_markers):
+            return True
+        return False
+
     def _magento_create_order_via_cart(self, api):
         self.ensure_one()
         instance = self.magento_instance_id
@@ -899,13 +1148,103 @@ class SaleOrder(models.Model):
 
         cart_id = api.create_guest_cart()
         for line in self.order_line:
-            sku = line.magento_sku or (line.product_id and line.product_id.default_code) or ""
-            if not sku:
+            sku_candidates = self._magento_get_line_sku_candidates(line)
+            if not sku_candidates:
                 raise UserError(_("Each order line must have a SKU to create a Magento order."))
             qty = float(line.product_uom_qty or 0.0)
             if qty <= 0:
                 raise UserError(_("Each order line must have a quantity greater than 0."))
-            api.add_guest_cart_item(cart_id, sku, qty)
+            add_error = None
+            availability_error = None
+            added = False
+            attempted_skus = []
+            saleable_autofix_attempts = set()
+            idx = 0
+            while idx < len(sku_candidates):
+                sku = sku_candidates[idx]
+                idx += 1
+                attempted_skus.append(sku)
+                try:
+                    api.add_guest_cart_item(cart_id, sku, qty)
+                    if line.magento_sku != sku:
+                        line.magento_sku = sku
+                    if line.magento_product_id and line.magento_product_id.sku != sku:
+                        line.magento_product_id.with_context(
+                            skip_magento_sync=True,
+                            skip_odoo_sync=True,
+                        ).write({"sku": sku})
+                    added = True
+                    break
+                except requests.exceptions.HTTPError as exc:
+                    add_error = exc
+                    if self._magento_is_not_saleable_error(exc):
+                        sku_token = str(sku or "").strip().lower()
+                        if sku_token and sku_token not in saleable_autofix_attempts:
+                            saleable_autofix_attempts.add(sku_token)
+                            try:
+                                if api.make_product_saleable_for_cart(sku, qty=qty):
+                                    _logger.info(
+                                        "Magento saleable auto-fix applied for SKU '%s' (order=%s). Retrying line add.",
+                                        sku,
+                                        self.name,
+                                    )
+                                    idx -= 1
+                                    continue
+                            except requests.exceptions.HTTPError:
+                                pass
+                        availability_error = exc
+                        break
+                    if self._magento_should_try_next_sku(exc):
+                        status = exc.response.status_code if exc.response is not None else 0
+                        # If SKU was renamed in Magento but mapping keeps old SKU,
+                        # fetch product by Magento ID and retry with fresh SKU.
+                        if (
+                            status == 404
+                            and line.magento_product_id
+                            and line.magento_product_id.magento_id
+                        ):
+                            try:
+                                remote_product = api.get_product_by_id(line.magento_product_id.magento_id)
+                            except requests.exceptions.HTTPError:
+                                remote_product = {}
+                            fresh_sku = str((remote_product or {}).get("sku") or "").strip()
+                            if fresh_sku:
+                                existing_tokens = {str(s or "").strip().lower() for s in sku_candidates}
+                                if fresh_sku.lower() not in existing_tokens:
+                                    sku_candidates.append(fresh_sku)
+                        continue
+                    break
+            if added:
+                continue
+            final_error = availability_error or add_error
+            if final_error:
+                error_message = self._magento_http_error_message(final_error)
+                if availability_error:
+                    raise UserError(
+                        _(
+                            "Magento product is not saleable for order line '%(line)s'. "
+                            "Tried SKU(s): %(skus)s. %(error)s "
+                            "Check product status, website assignment, and salable stock in Magento."
+                        )
+                        % {
+                            "line": line.display_name or line.name or _("(no name)"),
+                            "skus": ", ".join(attempted_skus or sku_candidates),
+                            "error": error_message,
+                        }
+                    )
+                if self._magento_should_try_next_sku(final_error):
+                    raise UserError(
+                        _(
+                            "Magento product is not available for order line '%(line)s'. "
+                            "Tried SKU(s): %(skus)s. %(error)s"
+                        )
+                        % {
+                            "line": line.display_name or line.name or _("(no name)"),
+                            "skus": ", ".join(attempted_skus or sku_candidates),
+                            "error": error_message,
+                        }
+                    )
+                self._magento_raise_http_error(final_error)
 
         shipping_partner = self.partner_shipping_id or partner
         billing_partner = self.partner_invoice_id or partner
@@ -1018,16 +1357,29 @@ class SaleOrder(models.Model):
         self.write(values)
         self._magento_sync_order_lines(data)
 
+    def _magento_rainbow_man_action(self, message):
+        return {
+            "type": "ir.actions.act_window_close",
+            "effect": {
+                "fadeout": "slow",
+                "message": message,
+                "type": "rainbow_man",
+            }
+        }
+
     # -------------------------
     # BUTTON ACTIONS
     # -------------------------
     def action_create_magento_order(self):
         self.ensure_one()
-        instance = self.magento_instance_id or self.env["magento.instance"].search(
-            [("active", "=", True)], limit=1
-        )
+        instance = self._magento_resolve_order_instance()
         if not instance:
-            raise UserError(_("Please configure Magento Instance first."))
+            raise UserError(
+                _(
+                    "Please configure Magento Instance on the order, "
+                    "or keep only one active Magento instance."
+                )
+            )
         if not self.magento_instance_id:
             self.magento_instance_id = instance.id
         api = MagentoAPI(instance)
@@ -1041,6 +1393,7 @@ class SaleOrder(models.Model):
             self._magento_sync_order_lines(response)
             if not response.get("increment_id") or not response.get("items"):
                 self._magento_refresh_from_magento(api, values.get("magento_order_id"))
+        return self._magento_rainbow_man_action(_("Order created in Magento."))
 
     def action_update_magento_order(self):
         self.ensure_one()
@@ -1052,7 +1405,7 @@ class SaleOrder(models.Model):
         api = MagentoAPI(instance)
         payload = self._magento_build_update_payload()
         if not payload:
-            return
+            return self._magento_rainbow_man_action(_("No order changes to update in Magento."))
         try:
             response = self._magento_update_order(api, payload)
         except requests.exceptions.HTTPError as exc:
@@ -1062,6 +1415,7 @@ class SaleOrder(models.Model):
             self.write(values)
             if not response.get("increment_id") or not response.get("items"):
                 self._magento_refresh_from_magento(api, self.magento_order_id)
+        return self._magento_rainbow_man_action(_("Order updated in Magento."))
 
     def action_pull_magento_order(self):
         self.ensure_one()
@@ -1096,6 +1450,7 @@ class SaleOrder(models.Model):
             self._magento_apply_payments_from_magento()
         self._magento_sync_credit_memos(api)
         self._magento_sync_shipments(api)
+        return self._magento_rainbow_man_action(_("Order pulled from Magento."))
 
 
 class SaleOrderLine(models.Model):
@@ -1112,14 +1467,20 @@ class SaleOrderLine(models.Model):
     @api.onchange("magento_product_id")
     def _onchange_magento_product_id(self):
         for line in self:
+            magento_ctx = bool(
+                line.env.context.get("from_magento_order_menu")
+                or line.env.context.get("default_magento_instance_id")
+            )
             product_map = line.magento_product_id
             if not product_map:
                 continue
             line.magento_sku = product_map.sku or ""
             line.product_id = product_map.odoo_product_id.id if product_map.odoo_product_id else False
             line.name = product_map.name or product_map.sku or ""
-            if line.order_id and line.order_id.is_magento_order:
-                line.price_unit = product_map.price or 0.0
+            if line.order_id and (line.order_id.is_magento_order or line.order_id.magento_instance_id or magento_ctx):
+                if line.order_id and not line.order_id.magento_instance_id and product_map.instance_id:
+                    line.order_id.magento_instance_id = product_map.instance_id
+                line.price_unit = product_map.price or (line.product_id.lst_price if line.product_id else 0.0)
             if not line.product_uom_qty:
                 line.product_uom_qty = 1.0
 
@@ -1129,6 +1490,12 @@ class SaleOrderLine(models.Model):
         for line in self:
             if not line.product_id:
                 continue
+            magento_ctx = bool(
+                line.env.context.get("from_magento_order_menu")
+                or line.env.context.get("default_magento_instance_id")
+            )
+            if not line.product_uom_qty:
+                line.product_uom_qty = 1.0
             if not line.magento_sku:
                 line.magento_sku = line.product_id.default_code or ""
             product_map = line.magento_product_id
@@ -1139,8 +1506,13 @@ class SaleOrderLine(models.Model):
                 product_map = self.env["magento.product.map"].search(domain, limit=1)
                 if product_map:
                     line.magento_product_id = product_map.id
-            if product_map and line.order_id and line.order_id.is_magento_order:
-                line.price_unit = product_map.price or 0.0
-                if not line.product_uom_qty:
-                    line.product_uom_qty = 1.0
+            if product_map and product_map.sku:
+                line.magento_sku = product_map.sku
+            if line.order_id and (line.order_id.is_magento_order or line.order_id.magento_instance_id or magento_ctx):
+                if line.order_id and not line.order_id.magento_instance_id and product_map and product_map.instance_id:
+                    line.order_id.magento_instance_id = product_map.instance_id
+                if product_map and product_map.price:
+                    line.price_unit = product_map.price
+                elif not line.price_unit:
+                    line.price_unit = line.product_id.lst_price or 0.0
         return res

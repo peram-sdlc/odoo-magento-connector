@@ -30,6 +30,13 @@ class MagentoOrderLine(models.Model):
         for line in self:
             line.subtotal = (line.quantity or 0.0) * (line.price_unit or 0.0)
 
+    def _resolve_unit_price(self, product_map=None, product=None):
+        if product_map and product_map.price:
+            return product_map.price
+        if product:
+            return product.lst_price or 0.0
+        return 0.0
+
     @api.onchange("magento_product_id")
     def _onchange_magento_product_id(self):
         for line in self:
@@ -39,7 +46,7 @@ class MagentoOrderLine(models.Model):
             line.sku = product_map.sku or ""
             line.product_id = product_map.odoo_product_id.id if product_map.odoo_product_id else False
             line.name = product_map.name or product_map.sku or ""
-            line.price_unit = product_map.price or 0.0
+            line.price_unit = line._resolve_unit_price(product_map, line.product_id)
             if not line.quantity:
                 line.quantity = 1.0
 
@@ -59,3 +66,6 @@ class MagentoOrderLine(models.Model):
                 product_map = self.env["magento.product.map"].search(domain, limit=1)
                 if product_map:
                     line.magento_product_id = product_map.id
+            line.price_unit = line._resolve_unit_price(line.magento_product_id, line.product_id)
+            if not line.quantity:
+                line.quantity = 1.0

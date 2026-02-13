@@ -46,9 +46,10 @@ class AccountMove(models.Model):
         copy=False,
     )
     magento_credit_memo_display = fields.Char(
-        string="Credit Memo",
-        compute="_compute_magento_credit_memo_display",
-        store=False,
+    string="Credit Memo",
+    compute="_compute_magento_credit_memo_display",
+    store=True,
+    index=True,
     )
     magento_refund_state = fields.Selection(
         [
@@ -63,10 +64,30 @@ class AccountMove(models.Model):
         readonly=True,
     )
     magento_refunded_amount = fields.Monetary(
-        string="Refunded",
+    string="Refunded",
+    currency_field="currency_id",
+    compute="_compute_magento_refunded_amount",
+    store=True,
+    )  
+
+    # Store Magento credit memo amounts so Odoo UI matches Magento even if taxes/config differ.
+    magento_credit_memo_grand_total = fields.Monetary(
+        string="Magento Credit Memo Grand Total",
         currency_field="currency_id",
-        compute="_compute_magento_refunded_amount",
-        store=False,
+        readonly=True,
+        copy=False,
+    )
+    magento_credit_memo_tax_amount = fields.Monetary(
+        string="Magento Credit Memo Tax",
+        currency_field="currency_id",
+        readonly=True,
+        copy=False,
+    )
+    magento_credit_memo_subtotal = fields.Monetary(
+        string="Magento Credit Memo Subtotal",
+        currency_field="currency_id",
+        readonly=True,
+        copy=False,
     )
 
     @api.depends(
@@ -162,12 +183,24 @@ class AccountMove(models.Model):
             else:
                 move.magento_refund_state = "open"
 
-    @api.depends("amount_total")
+    @api.depends(
+        "amount_total",
+        "magento_credit_memo_id",
+        "magento_credit_memo_grand_total",
+        "magento_credit_memo_tax_amount",
+    )
     def _compute_magento_refunded_amount(self):
         for move in self:
-            move.magento_refunded_amount = abs(move.amount_total or 0.0)
+            # Prefer Magento totals (when available) so UI matches Magento.
+            if move.magento_credit_memo_id and move.magento_credit_memo_grand_total:
+                # User expectation: "Refunded" excluding tax (Magento grid often shows excl. tax).
+                base = float(move.magento_credit_memo_grand_total or 0.0)
+                tax = float(move.magento_credit_memo_tax_amount or 0.0)
+                move.magento_refunded_amount = abs(base - tax) if tax else abs(base)
+            else:
+                move.magento_refunded_amount = abs(move.amount_total or 0.0)
 
-    @api.depends("ref", "name", "magento_credit_memo_id")
+    @api.depends("ref", "name", "magento_credit_memo_id", "state", "move_type")
     def _compute_magento_credit_memo_display(self):
         for move in self:
             ref = (move.ref or "").strip()
@@ -380,10 +413,32 @@ class AccountMove(models.Model):
             if credit_data and credit_data.get("increment_id") and not self.ref:
                 # Store the Magento document number as Odoo's external reference.
                 self.ref = credit_data.get("increment_id")
+            if credit_data:
+                # Persist Magento amounts to avoid Odoo tax configuration affecting the display.
+                def _to_float(v):
+                    try:
+                        return float(v)
+                    except (TypeError, ValueError):
+                        return 0.0
+
+                self.magento_credit_memo_grand_total = _to_float(
+                    credit_data.get("grand_total") or credit_data.get("base_grand_total")
+                )
+                self.magento_credit_memo_tax_amount = _to_float(
+                    credit_data.get("tax_amount") or credit_data.get("base_tax_amount")
+                )
+                self.magento_credit_memo_subtotal = _to_float(
+                    credit_data.get("subtotal") or credit_data.get("base_subtotal")
+                )
         except Exception:
             credit_data = {}
         if not self.magento_credit_memo_created_at:
             self.magento_credit_memo_created_at = fields.Datetime.now()
+        # Force recompute stored values so list view updates immediately
+        self._compute_magento_credit_memo_display()
+        self._compute_magento_refunded_amount()
+        self._compute_magento_refund_state()
+
 
     def action_open_magento_credit_memo(self):
         self.ensure_one()
