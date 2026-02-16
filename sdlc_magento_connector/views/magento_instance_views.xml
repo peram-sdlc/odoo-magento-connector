@@ -435,13 +435,6 @@
             <field name="model">account.move</field>
             <field name="arch" type="xml">
                 <list string="Magento Credit Memos" create="false" import="0">
-                    <field name="id" invisible="1" />
-                    <field name="move_type" invisible="1" />
-
-                    <!-- force read -->
-                    <field name="magento_credit_memo_id" invisible="1" />
-                    <field name="magento_sale_order_id" invisible="1" />
-
                     <field name="magento_credit_memo_display" />
                     <field name="magento_credit_memo_created_at" />
                     <field name="magento_sale_order_name" />
