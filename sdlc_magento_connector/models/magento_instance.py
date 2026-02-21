@@ -1,6 +1,7 @@
 import calendar
 import logging
 from datetime import datetime, timedelta
+from urllib.parse import urlsplit
 
 from odoo import api, models, fields
 from odoo.exceptions import ValidationError, UserError
@@ -37,7 +38,13 @@ class MagentoInstance(models.Model):
     # FIELDS
     # =====================
     name = fields.Char(required=True)
-    base_url = fields.Char(required=True)
+    base_url = fields.Char(
+        required=True,
+        help=(
+            "Magento base URL, e.g. https://magento.example.com. "
+            "Use localhost only when Magento runs on the same host/container as Odoo."
+        ),
+    )
     access_token = fields.Char(required=True)
     active = fields.Boolean(default=True)
     verify_ssl = fields.Boolean(default=True)
@@ -596,9 +603,20 @@ class MagentoInstance(models.Model):
                 f"Magento request timed out for '{base_url}'. Check server availability."
             ) from exc
         if isinstance(exc, requests.exceptions.ConnectionError):
+            host = (urlsplit(base_url).hostname or "").strip().lower()
+            loopback_hint = ""
+            if host in {"localhost", "127.0.0.1", "::1"}:
+                loopback_hint = (
+                    " The configured URL is loopback (localhost/127.0.0.1/::1). "
+                    "On a deployed server/container this points to that server/container itself. "
+                    "If Odoo runs in Docker/Podman and Magento runs on the host, keep localhost and map "
+                    "host-gateway (example Docker Compose: extra_hosts: ['host.docker.internal:host-gateway']). "
+                    "Otherwise use the Magento server domain or IP."
+                )
             raise UserError(
                 f"Magento connection failed for '{base_url}'. "
                 f"Details: {exc}. Check host, port, protocol (http/https), and if Magento is running."
+                f"{loopback_hint}"
             ) from exc
         raise UserError(f"Magento API error: {exc}") from exc
 

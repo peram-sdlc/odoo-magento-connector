@@ -25,10 +25,36 @@ class MagentoAPI:
         if host not in {"localhost", "127.0.0.1", "::1"}:
             return base_urls
 
+        # Keep localhost usable in common deployment layouts:
+        # - native host: localhost / 127.0.0.1 / ::1
+        # - docker/podman container -> host machine:
+        #   host.docker.internal / host.containers.internal / gateway.docker.internal
+        # - common Linux Docker bridge gateway: 172.17.0.1
         fallback_hosts = {
-            "localhost": ["127.0.0.1", "::1"],
-            "127.0.0.1": ["localhost", "::1"],
-            "::1": ["localhost", "127.0.0.1"],
+            "localhost": [
+                "127.0.0.1",
+                "::1",
+                "host.docker.internal",
+                "host.containers.internal",
+                "gateway.docker.internal",
+                "172.17.0.1",
+            ],
+            "127.0.0.1": [
+                "localhost",
+                "::1",
+                "host.docker.internal",
+                "host.containers.internal",
+                "gateway.docker.internal",
+                "172.17.0.1",
+            ],
+            "::1": [
+                "localhost",
+                "127.0.0.1",
+                "host.docker.internal",
+                "host.containers.internal",
+                "gateway.docker.internal",
+                "172.17.0.1",
+            ],
         }.get(host, [])
 
         auth = ""
@@ -55,6 +81,22 @@ class MagentoAPI:
         host = (urlsplit(base_url).hostname or "").strip().lower()
         return host in {"localhost", "127.0.0.1", "::1"}
 
+    def _is_localhost_related_base_url(self, base_url):
+        host = (urlsplit(base_url).hostname or "").strip().lower()
+        if host in {"localhost", "127.0.0.1", "::1"}:
+            return True
+
+        original_host = (urlsplit(self.base_url).hostname or "").strip().lower()
+        if original_host not in {"localhost", "127.0.0.1", "::1"}:
+            return False
+
+        return host in {
+            "host.docker.internal",
+            "host.containers.internal",
+            "gateway.docker.internal",
+            "172.17.0.1",
+        }
+
     def _request(self, method, endpoint, *, params=None, payload=None):
         last_exc = None
         for base_url in self._base_urls:
@@ -75,7 +117,7 @@ class MagentoAPI:
                 return response
             except requests.exceptions.SSLError as exc:
                 # Local Magento often uses self-signed certs; retry loopback once without SSL verify.
-                if self.verify and self._is_loopback_base_url(base_url):
+                if self.verify and self._is_localhost_related_base_url(base_url):
                     retry_kwargs = dict(request_kwargs)
                     retry_kwargs["verify"] = False
                     try:
