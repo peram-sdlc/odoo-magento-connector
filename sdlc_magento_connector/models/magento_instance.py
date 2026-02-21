@@ -510,7 +510,10 @@ class MagentoInstance(models.Model):
                 if isinstance(result, dict):
                     counts.update(result)
             except Exception as exc:
-                _logger.exception("Auto sync %s failed for %s", sync_type, self.name)
+                if isinstance(exc, UserError):
+                    _logger.warning("Auto sync %s failed for %s: %s", sync_type, self.name, exc)
+                else:
+                    _logger.exception("Auto sync %s failed for %s", sync_type, self.name)
                 error_note = "%s sync failed: %s" % (sync_type.capitalize(), exc)
 
             end_time = fields.Datetime.now()
@@ -575,6 +578,25 @@ class MagentoInstance(models.Model):
     # =====================
     # SYNC METHODS
     # =====================
+    def _raise_magento_request_user_error(self, exc, instance):
+        base_url = (getattr(instance, "base_url", "") or "").strip()
+        if isinstance(exc, requests.exceptions.HTTPError):
+            if exc.response is not None:
+                raise UserError(
+                    f"Magento HTTP {exc.response.status_code}: {exc.response.text}"
+                ) from exc
+            raise UserError(f"Magento HTTP error: {exc}") from exc
+        if isinstance(exc, requests.exceptions.Timeout):
+            raise UserError(
+                f"Magento request timed out for '{base_url}'. Check server availability."
+            ) from exc
+        if isinstance(exc, requests.exceptions.ConnectionError):
+            raise UserError(
+                f"Magento connection failed for '{base_url}'. "
+                "Check host, port, protocol (http/https), and if Magento is running."
+            ) from exc
+        raise UserError(f"Magento API error: {exc}") from exc
+
     def sync_categories(self):
         total_created = 0
         total_updated = 0
@@ -584,12 +606,8 @@ class MagentoInstance(models.Model):
             api = MagentoAPI(instance)
             try:
                 tree = api.get_categories()
-            except requests.exceptions.HTTPError as exc:
-                if exc.response is not None:
-                    raise UserError(
-                        f"Magento HTTP {exc.response.status_code}: {exc.response.text}"
-                    ) from exc
-                raise UserError(f"Magento API error: {exc}") from exc
+            except requests.exceptions.RequestException as exc:
+                self._raise_magento_request_user_error(exc, instance)
 
             flat = instance._flatten_categories(tree)
             cat_model = self.env["magento.category"]
@@ -649,12 +667,8 @@ class MagentoInstance(models.Model):
             api = MagentoAPI(instance)
             try:
                 sets = api.get_attribute_sets()
-            except requests.exceptions.HTTPError as exc:
-                if exc.response is not None:
-                    raise UserError(
-                        f"Magento HTTP {exc.response.status_code}: {exc.response.text}"
-                    ) from exc
-                raise UserError(f"Magento API error: {exc}") from exc
+            except requests.exceptions.RequestException as exc:
+                self._raise_magento_request_user_error(exc, instance)
 
             for item in sets:
                 set_id = item.get("attribute_set_id") or item.get("id")
@@ -744,12 +758,8 @@ class MagentoInstance(models.Model):
             api = MagentoAPI(instance)
             try:
                 products = api.get_products()
-            except requests.exceptions.HTTPError as exc:
-                if exc.response is not None:
-                    raise UserError(
-                        f"Magento HTTP {exc.response.status_code}: {exc.response.text}"
-                    ) from exc
-                raise UserError(f"Magento API error: {exc}") from exc
+            except requests.exceptions.RequestException as exc:
+                self._raise_magento_request_user_error(exc, instance)
 
             map_model = self.env["magento.product.map"]
 
@@ -760,7 +770,7 @@ class MagentoInstance(models.Model):
 
                 try:
                     product_data = api.get_product(sku)
-                except requests.exceptions.HTTPError:
+                except requests.exceptions.RequestException:
                     continue
 
                 product = self.env["product.product"].search(
@@ -814,7 +824,7 @@ class MagentoInstance(models.Model):
                             content = (media or {}).get("content") or {}
                             if content.get("base64_encoded_data"):
                                 values["image_1920"] = content["base64_encoded_data"]
-                        except requests.exceptions.HTTPError:
+                        except requests.exceptions.RequestException:
                             pass
                 mapping.with_context(skip_magento_sync=True).write(values)
                 stock_item = (product_data.get("extension_attributes") or {}).get("stock_item")
@@ -869,12 +879,8 @@ class MagentoInstance(models.Model):
             api = MagentoAPI(instance)
             try:
                 orders = api.get_orders()
-            except requests.exceptions.HTTPError as exc:
-                if exc.response is not None:
-                    raise UserError(
-                        f"Magento HTTP {exc.response.status_code}: {exc.response.text}"
-                    ) from exc
-                raise UserError(f"Magento API error: {exc}") from exc
+            except requests.exceptions.RequestException as exc:
+                self._raise_magento_request_user_error(exc, instance)
 
             order_model = self.env["sale.order"].with_context(skip_magento_sync=True)
 
@@ -891,7 +897,7 @@ class MagentoInstance(models.Model):
                 if values.get("magento_invoice_state") == "not_invoiced":
                     try:
                         invoices = api.get_invoices(order_id=magento_id)
-                    except requests.exceptions.HTTPError as exc:
+                    except requests.exceptions.RequestException as exc:
                         _logger.warning(
                             "Magento invoice lookup failed for order %s: %s",
                             magento_id,
@@ -1016,12 +1022,8 @@ class MagentoInstance(models.Model):
             api = MagentoAPI(instance)
             try:
                 customers = api.get_customers()
-            except requests.exceptions.HTTPError as exc:
-                if exc.response is not None:
-                    raise UserError(
-                        f"Magento HTTP {exc.response.status_code}: {exc.response.text}"
-                    ) from exc
-                raise UserError(f"Magento API error: {exc}") from exc
+            except requests.exceptions.RequestException as exc:
+                self._raise_magento_request_user_error(exc, instance)
             for data in customers:
                 magento_id = str(data.get("id") or "")
                 email = data.get("email") or ""
@@ -1504,12 +1506,8 @@ class MagentoInstance(models.Model):
 
         try:
             api.get_websites()  # light endpoint
-        except requests.exceptions.HTTPError as exc:
-            if exc.response is not None:
-                raise UserError(
-                    f"Magento HTTP {exc.response.status_code}: {exc.response.text}"
-                ) from exc
-            raise UserError(f"Magento HTTP error: {exc}") from exc
+        except requests.exceptions.RequestException as exc:
+            self._raise_magento_request_user_error(exc, self)
         except Exception as exc:
             raise UserError(f"Connection failed: {exc}") from exc
 

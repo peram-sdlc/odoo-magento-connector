@@ -5,7 +5,6 @@ from odoo.exceptions import UserError
 
 from ..services.magento_api import MagentoAPI
 
-
 class AccountMove(models.Model):
     _inherit = "account.move"
 
@@ -171,9 +170,6 @@ class AccountMove(models.Model):
                 continue
             if move.state != "posted":
                 move.magento_refund_state = "draft"
-            # If the record is linked to a Magento credit memo, consider it refunded
-            # from a Magento point of view even if no reconciliation/payment was
-            # registered in Odoo.
             elif move.magento_credit_memo_id:
                 move.magento_refund_state = "refunded"
             elif move.payment_state in ("paid", "in_payment"):

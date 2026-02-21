@@ -1,6 +1,10 @@
 import requests
 from requests.utils import quote
-from requests_oauthlib import OAuth1
+
+try:
+    from requests_oauthlib import OAuth1
+except ImportError:  # pragma: no cover - environment dependent
+    OAuth1 = None
 
 class MagentoAPI:
     def __init__(self, instance):
@@ -19,6 +23,11 @@ class MagentoAPI:
         )
 
         if consumer_key and consumer_secret and access_token and access_token_secret:
+            if OAuth1 is None:
+                raise ImportError(
+                    "Python package 'requests-oauthlib' is required for OAuth1 Magento auth. "
+                    "Install it with: pip install requests-oauthlib"
+                )
             signature_method = (
                 getattr(instance, "oauth_signature_method", None)
                 or getattr(instance, "signature_method", None)

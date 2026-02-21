@@ -5,6 +5,9 @@
     'summary': 'Magento 2 Connector for Odoo',
     'author': 'SDLC Corp',
     'depends': ['base', 'product', 'sale', 'account'],
+    'external_dependencies': {
+        'python': ['requests_oauthlib'],
+    },
     'data': [
         'security/ir.model.access.csv',
         'data/cleanup_billing_agreement.xml',
