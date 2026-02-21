@@ -1,5 +1,6 @@
 import requests
 from requests.utils import quote
+from urllib.parse import urlsplit, urlunsplit
 
 class MagentoAPI:
     def __init__(self, instance):
@@ -14,42 +15,96 @@ class MagentoAPI:
         if access_token:
             self.headers["Authorization"] = f"Bearer {access_token}"
 
-        if instance.verify_ssl:
-            self.verify = r"C:\Users\Admin\AppData\Local\mkcert\rootCA.pem"
-        else:
-            self.verify = False  
+        self.verify = bool(instance.verify_ssl)
+        self._base_urls = self._build_base_urls()
+
+    def _build_base_urls(self):
+        base_urls = [self.base_url]
+        parsed = urlsplit(self.base_url)
+        host = (parsed.hostname or "").strip().lower()
+        if host not in {"localhost", "127.0.0.1", "::1"}:
+            return base_urls
+
+        fallback_hosts = {
+            "localhost": ["127.0.0.1", "::1"],
+            "127.0.0.1": ["localhost", "::1"],
+            "::1": ["localhost", "127.0.0.1"],
+        }.get(host, [])
+
+        auth = ""
+        if parsed.username:
+            auth = parsed.username
+            if parsed.password is not None:
+                auth += f":{parsed.password}"
+            auth += "@"
+        port = f":{parsed.port}" if parsed.port else ""
+
+        for fallback_host in fallback_hosts:
+            netloc_host = fallback_host
+            if ":" in netloc_host and not netloc_host.startswith("["):
+                netloc_host = f"[{netloc_host}]"
+            fallback_netloc = f"{auth}{netloc_host}{port}"
+            fallback_url = urlunsplit(
+                (parsed.scheme, fallback_netloc, parsed.path, parsed.query, parsed.fragment)
+            ).rstrip("/")
+            if fallback_url not in base_urls:
+                base_urls.append(fallback_url)
+        return base_urls
+
+    def _is_loopback_base_url(self, base_url):
+        host = (urlsplit(base_url).hostname or "").strip().lower()
+        return host in {"localhost", "127.0.0.1", "::1"}
+
+    def _request(self, method, endpoint, *, params=None, payload=None):
+        last_exc = None
+        for base_url in self._base_urls:
+            request_kwargs = {
+                "headers": self.headers,
+                "timeout": 60,
+                "verify": self.verify,
+            }
+            if params is not None:
+                request_kwargs["params"] = params
+            if payload is not None:
+                request_kwargs["json"] = payload
+            url = f"{base_url}{endpoint}"
+
+            try:
+                response = requests.request(method, url, **request_kwargs)
+                response.raise_for_status()
+                return response
+            except requests.exceptions.SSLError as exc:
+                # Local Magento often uses self-signed certs; retry loopback once without SSL verify.
+                if self.verify and self._is_loopback_base_url(base_url):
+                    retry_kwargs = dict(request_kwargs)
+                    retry_kwargs["verify"] = False
+                    try:
+                        response = requests.request(method, url, **retry_kwargs)
+                        response.raise_for_status()
+                        return response
+                    except requests.exceptions.RequestException as retry_exc:
+                        last_exc = retry_exc
+                        continue
+                last_exc = exc
+                continue
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as exc:
+                last_exc = exc
+                continue
+
+        if last_exc is not None:
+            raise last_exc
+        raise requests.exceptions.RequestException("Magento request failed without response.")
 
     def _get(self, endpoint, params=None):
-        response = requests.get(
-            f"{self.base_url}{endpoint}",
-            headers=self.headers,
-            params=params,
-            timeout=60,
-            verify=self.verify,
-        )
-        response.raise_for_status()
+        response = self._request("get", endpoint, params=params)
         return response.json()
 
     def _post(self, endpoint, payload=None):
-        response = requests.post(
-            f"{self.base_url}{endpoint}",
-            headers=self.headers,
-            json=payload,
-            timeout=60,
-            verify=self.verify,
-        )
-        response.raise_for_status()
+        response = self._request("post", endpoint, payload=payload)
         return response.json()
 
     def _put(self, endpoint, payload=None):
-        response = requests.put(
-            f"{self.base_url}{endpoint}",
-            headers=self.headers,
-            json=payload,
-            timeout=60,
-            verify=self.verify,
-        )
-        response.raise_for_status()
+        response = self._request("put", endpoint, payload=payload)
         return response.json()
 
     def _resolve_store_code(self):

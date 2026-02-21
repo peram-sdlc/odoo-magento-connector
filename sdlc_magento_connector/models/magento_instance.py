@@ -586,6 +586,11 @@ class MagentoInstance(models.Model):
                     f"Magento HTTP {exc.response.status_code}: {exc.response.text}"
                 ) from exc
             raise UserError(f"Magento HTTP error: {exc}") from exc
+        if isinstance(exc, requests.exceptions.SSLError):
+            raise UserError(
+                f"Magento SSL verification failed for '{base_url}': {exc}. "
+                "For local/self-signed certs, disable 'Verify SSL' on the instance."
+            ) from exc
         if isinstance(exc, requests.exceptions.Timeout):
             raise UserError(
                 f"Magento request timed out for '{base_url}'. Check server availability."
@@ -593,7 +598,7 @@ class MagentoInstance(models.Model):
         if isinstance(exc, requests.exceptions.ConnectionError):
             raise UserError(
                 f"Magento connection failed for '{base_url}'. "
-                "Check host, port, protocol (http/https), and if Magento is running."
+                f"Details: {exc}. Check host, port, protocol (http/https), and if Magento is running."
             ) from exc
         raise UserError(f"Magento API error: {exc}") from exc
 
