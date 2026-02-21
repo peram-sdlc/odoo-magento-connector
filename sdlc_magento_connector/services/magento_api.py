@@ -1,57 +1,18 @@
 import requests
 from requests.utils import quote
 
-try:
-    from requests_oauthlib import OAuth1
-except ImportError:  # pragma: no cover - environment dependent
-    OAuth1 = None
-
 class MagentoAPI:
     def __init__(self, instance):
         self.instance = instance
         self.base_url = instance.base_url.rstrip("/")
-        self.auth = None
         self._store_code = None
         self._guest_cart_rest_prefix = "/rest/V1"
-        consumer_key = getattr(instance, "consumer_key", None) or getattr(instance, "oauth_consumer_key", None)
-        consumer_secret = getattr(instance, "consumer_secret", None) or getattr(instance, "oauth_consumer_secret", None)
+        self.headers = {"Content-Type": "application/json"}
         access_token = getattr(instance, "access_token", None)
-        access_token_secret = (
-            getattr(instance, "access_token_secret", None)
-            or getattr(instance, "oauth_access_token_secret", None)
-            or getattr(instance, "oauth_token_secret", None)
-        )
-
-        if consumer_key and consumer_secret and access_token and access_token_secret:
-            if OAuth1 is None:
-                raise ImportError(
-                    "Python package 'requests-oauthlib' is required for OAuth1 Magento auth. "
-                    "Install it with: pip install requests-oauthlib"
-                )
-            signature_method = (
-                getattr(instance, "oauth_signature_method", None)
-                or getattr(instance, "signature_method", None)
-                or "HMAC-SHA256"
-            )
-            signature_type = (
-                getattr(instance, "oauth_signature_type", None)
-                or getattr(instance, "signature_type", None)
-                or "QUERY"
-            )
-            self.auth = OAuth1(
-                consumer_key,
-                consumer_secret,
-                access_token,
-                access_token_secret,
-                signature_method=signature_method,
-                signature_type=signature_type,
-            )
-            self.headers = {"Content-Type": "application/json"}
-        else:
-            self.headers = {
-                "Authorization": f"Bearer {instance.access_token}",
-                "Content-Type": "application/json",
-            }
+        if isinstance(access_token, str):
+            access_token = access_token.strip()
+        if access_token:
+            self.headers["Authorization"] = f"Bearer {access_token}"
 
         if instance.verify_ssl:
             self.verify = r"C:\Users\Admin\AppData\Local\mkcert\rootCA.pem"
@@ -64,7 +25,6 @@ class MagentoAPI:
             headers=self.headers,
             params=params,
             timeout=60,
-            auth=self.auth,
             verify=self.verify,
         )
         response.raise_for_status()
@@ -76,7 +36,6 @@ class MagentoAPI:
             headers=self.headers,
             json=payload,
             timeout=60,
-            auth=self.auth,
             verify=self.verify,
         )
         response.raise_for_status()
@@ -88,7 +47,6 @@ class MagentoAPI:
             headers=self.headers,
             json=payload,
             timeout=60,
-            auth=self.auth,
             verify=self.verify,
         )
         response.raise_for_status()
