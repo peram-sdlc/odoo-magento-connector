@@ -826,20 +826,22 @@ class MagentoMappingReport(models.Model):
         return super().write(vals)
 
     def init(self):
-        # Cleanup existing report rows that still contain Shopify wording.
+        # Keep upgrade work bounded: cleanup only recent rows and only
+        # short label fields (skip large text payloads).
         self.env.cr.execute(
             """
-            UPDATE magento_mapping_report
-               SET name = REPLACE(REPLACE(REPLACE(name, 'Shopify', 'Magento'), 'shopify', 'magento'), 'SHOPIFY', 'MAGENTO'),
-                   source_action = REPLACE(REPLACE(REPLACE(source_action, 'Shopify', 'Magento'), 'shopify', 'magento'), 'SHOPIFY', 'MAGENTO'),
-                   record_name = REPLACE(REPLACE(REPLACE(record_name, 'Shopify', 'Magento'), 'shopify', 'magento'), 'SHOPIFY', 'MAGENTO'),
-                   payload_text = REPLACE(REPLACE(REPLACE(payload_text, 'Shopify', 'Magento'), 'shopify', 'magento'), 'SHOPIFY', 'MAGENTO'),
-                   notes = REPLACE(REPLACE(REPLACE(notes, 'Shopify', 'Magento'), 'shopify', 'magento'), 'SHOPIFY', 'MAGENTO')
-             WHERE COALESCE(name, '') ILIKE '%shopify%'
-                OR COALESCE(source_action, '') ILIKE '%shopify%'
-                OR COALESCE(record_name, '') ILIKE '%shopify%'
-                OR COALESCE(payload_text, '') ILIKE '%shopify%'
-                OR COALESCE(notes, '') ILIKE '%shopify%';
+            WITH target AS (
+                SELECT id
+                  FROM magento_mapping_report
+              ORDER BY id DESC
+                 LIMIT 5000
+            )
+            UPDATE magento_mapping_report AS report
+               SET name = REPLACE(REPLACE(REPLACE(report.name, 'Shopify', 'Magento'), 'shopify', 'magento'), 'SHOPIFY', 'MAGENTO'),
+                   source_action = REPLACE(REPLACE(REPLACE(report.source_action, 'Shopify', 'Magento'), 'shopify', 'magento'), 'SHOPIFY', 'MAGENTO'),
+                   record_name = REPLACE(REPLACE(REPLACE(report.record_name, 'Shopify', 'Magento'), 'shopify', 'magento'), 'SHOPIFY', 'MAGENTO')
+              FROM target
+             WHERE report.id = target.id;
             """
         )
 
@@ -928,20 +930,22 @@ class MagentoMappingReportLine(models.Model):
         return super().write(vals)
 
     def init(self):
-        # Cleanup existing line rows that still contain Shopify wording.
+        # Keep upgrade work bounded: cleanup only recent rows and only
+        # short label fields (skip large text values).
         self.env.cr.execute(
             """
-            UPDATE magento_mapping_report_line
-               SET scope = REPLACE(REPLACE(REPLACE(scope, 'Shopify', 'Magento'), 'shopify', 'magento'), 'SHOPIFY', 'MAGENTO'),
-                   odoo_field = REPLACE(REPLACE(REPLACE(odoo_field, 'Shopify', 'Magento'), 'shopify', 'magento'), 'SHOPIFY', 'MAGENTO'),
-                   magento_field = REPLACE(REPLACE(REPLACE(magento_field, 'Shopify', 'Magento'), 'shopify', 'magento'), 'SHOPIFY', 'MAGENTO'),
-                   old_value = REPLACE(REPLACE(REPLACE(old_value, 'Shopify', 'Magento'), 'shopify', 'magento'), 'SHOPIFY', 'MAGENTO'),
-                   new_value = REPLACE(REPLACE(REPLACE(new_value, 'Shopify', 'Magento'), 'shopify', 'magento'), 'SHOPIFY', 'MAGENTO')
-             WHERE COALESCE(scope, '') ILIKE '%shopify%'
-                OR COALESCE(odoo_field, '') ILIKE '%shopify%'
-                OR COALESCE(magento_field, '') ILIKE '%shopify%'
-                OR COALESCE(old_value, '') ILIKE '%shopify%'
-                OR COALESCE(new_value, '') ILIKE '%shopify%';
+            WITH target AS (
+                SELECT id
+                  FROM magento_mapping_report_line
+              ORDER BY id DESC
+                 LIMIT 5000
+            )
+            UPDATE magento_mapping_report_line AS line
+               SET scope = REPLACE(REPLACE(REPLACE(line.scope, 'Shopify', 'Magento'), 'shopify', 'magento'), 'SHOPIFY', 'MAGENTO'),
+                   odoo_field = REPLACE(REPLACE(REPLACE(line.odoo_field, 'Shopify', 'Magento'), 'shopify', 'magento'), 'SHOPIFY', 'MAGENTO'),
+                   magento_field = REPLACE(REPLACE(REPLACE(line.magento_field, 'Shopify', 'Magento'), 'shopify', 'magento'), 'SHOPIFY', 'MAGENTO')
+              FROM target
+             WHERE line.id = target.id;
             """
         )
 

@@ -1,7 +1,7 @@
 import calendar
 import logging
 from datetime import datetime, timedelta
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 from odoo import api, models, fields
 from odoo.exceptions import ValidationError, UserError
@@ -273,6 +273,30 @@ class MagentoInstance(models.Model):
                     "Select at least one Auto Sync scope: Products, Customers, Categories, or Orders."
                 )
 
+    def _normalize_base_url(self, value):
+        url = (value or "").strip()
+        if not url:
+            raise UserError("Magento base URL is required.")
+        if "://" not in url:
+            url = f"https://{url}"
+        parsed = urlsplit(url)
+        scheme = (parsed.scheme or "https").lower()
+        if scheme not in {"http", "https"}:
+            raise UserError("Magento base URL must start with http:// or https://")
+        netloc = (parsed.netloc or "").strip().lower()
+        if not netloc:
+            raise UserError("Please provide a valid Magento base URL.")
+        path = (parsed.path or "").rstrip("/")
+        return urlunsplit((scheme, netloc, path, "", ""))
+
+    def _sanitize_connection_vals(self, vals):
+        vals = dict(vals or {})
+        if "base_url" in vals:
+            vals["base_url"] = self._normalize_base_url(vals.get("base_url"))
+        if "access_token" in vals and isinstance(vals.get("access_token"), str):
+            vals["access_token"] = vals["access_token"].strip()
+        return vals
+
     def _normalized_auto_sync_hour(self):
         self.ensure_one()
         return max(0, min(23, int(self.auto_sync_hour or 0)))
@@ -432,13 +456,24 @@ class MagentoInstance(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
-        records = super().create(vals_list)
+        sanitized_vals_list = []
+        for vals in vals_list:
+            clean_vals = self._sanitize_connection_vals(vals)
+            if "access_token" in clean_vals and not clean_vals.get("access_token"):
+                raise UserError("Magento access token is required.")
+            sanitized_vals_list.append(clean_vals)
+
+        records = super().create(sanitized_vals_list)
         records._apply_auto_sync_cron()
         return records
 
     def write(self, vals):
-        result = super().write(vals)
-        if self._AUTO_SYNC_TRIGGER_FIELDS.intersection(vals.keys()):
+        clean_vals = self._sanitize_connection_vals(vals)
+        if "access_token" in clean_vals and not clean_vals.get("access_token"):
+            raise UserError("Magento access token is required.")
+
+        result = super().write(clean_vals)
+        if self._AUTO_SYNC_TRIGGER_FIELDS.intersection(clean_vals.keys()):
             self._apply_auto_sync_cron()
         return result
 
@@ -589,10 +624,23 @@ class MagentoInstance(models.Model):
         base_url = (getattr(instance, "base_url", "") or "").strip()
         if isinstance(exc, requests.exceptions.HTTPError):
             if exc.response is not None:
+                status = exc.response.status_code
+                body = (exc.response.text or "").strip()
+                if len(body) > 1200:
+                    body = body[:1200] + "..."
+                extra = ""
+                if status in (401, 403):
+                    extra = " Check the Magento access token permissions for REST API access."
+                elif status == 404:
+                    extra = " Verify base URL and REST endpoint availability (e.g. /rest/V1/store/websites)."
                 raise UserError(
-                    f"Magento HTTP {exc.response.status_code}: {exc.response.text}"
+                    f"Magento HTTP {status}: {body}.{extra}"
                 ) from exc
             raise UserError(f"Magento HTTP error: {exc}") from exc
+        if isinstance(exc, (requests.exceptions.MissingSchema, requests.exceptions.InvalidSchema, requests.exceptions.InvalidURL)):
+            raise UserError(
+                f"Invalid Magento base URL '{base_url}'. Use a full URL like https://magento.example.com"
+            ) from exc
         if isinstance(exc, requests.exceptions.SSLError):
             raise UserError(
                 f"Magento SSL verification failed for '{base_url}': {exc}. "
@@ -1525,6 +1573,19 @@ class MagentoInstance(models.Model):
     # =====================
     def action_test_connection(self):
         self.ensure_one()
+        base_url = self._normalize_base_url(self.base_url)
+        access_token = (self.access_token or "").strip()
+        if not access_token:
+            raise UserError("Magento access token is missing on this instance.")
+
+        updates = {}
+        if base_url != (self.base_url or ""):
+            updates["base_url"] = base_url
+        if access_token != (self.access_token or ""):
+            updates["access_token"] = access_token
+        if updates:
+            self.write(updates)
+
         api = MagentoAPI(self)
 
         try:
