@@ -1,13 +1,13 @@
 import requests
+from requests.compat import urlparse, urlunparse
 from requests.utils import quote
-from urllib.parse import urlsplit, urlunsplit
 
 class MagentoAPI:
     def __init__(self, instance):
         self.instance = instance
         self.base_url = instance.base_url.rstrip("/")
         self._store_code = None
-        self._guest_cart_rest_prefix = "/rest/V1"
+        self._guest_cart_rest_prefix = "/rest/V156/Q"
         self.headers = {"Content-Type": "application/json"}
         access_token = getattr(instance, "access_token", None)
         if isinstance(access_token, str):
@@ -20,7 +20,7 @@ class MagentoAPI:
 
     def _build_base_urls(self):
         base_urls = [self.base_url]
-        parsed = urlsplit(self.base_url)
+        parsed = urlparse(self.base_url)
         host = (parsed.hostname or "").strip().lower()
         if host not in {"localhost", "127.0.0.1", "::1"}:
             return base_urls
@@ -70,23 +70,23 @@ class MagentoAPI:
             if ":" in netloc_host and not netloc_host.startswith("["):
                 netloc_host = f"[{netloc_host}]"
             fallback_netloc = f"{auth}{netloc_host}{port}"
-            fallback_url = urlunsplit(
-                (parsed.scheme, fallback_netloc, parsed.path, parsed.query, parsed.fragment)
+            fallback_url = urlunparse(
+                (parsed.scheme, fallback_netloc, parsed.path, parsed.params, parsed.query, parsed.fragment)
             ).rstrip("/")
             if fallback_url not in base_urls:
                 base_urls.append(fallback_url)
         return base_urls
 
     def _is_loopback_base_url(self, base_url):
-        host = (urlsplit(base_url).hostname or "").strip().lower()
+        host = (urlparse(base_url).hostname or "").strip().lower()
         return host in {"localhost", "127.0.0.1", "::1"}
 
     def _is_localhost_related_base_url(self, base_url):
-        host = (urlsplit(base_url).hostname or "").strip().lower()
+        host = (urlparse(base_url).hostname or "").strip().lower()
         if host in {"localhost", "127.0.0.1", "::1"}:
             return True
 
-        original_host = (urlsplit(self.base_url).hostname or "").strip().lower()
+        original_host = (urlparse(self.base_url).hostname or "").strip().lower()
         if original_host not in {"localhost", "127.0.0.1", "::1"}:
             return False
 

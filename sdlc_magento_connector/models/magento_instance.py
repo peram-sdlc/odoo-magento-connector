@@ -1,12 +1,13 @@
 import calendar
 import logging
 from datetime import datetime, timedelta
-from urllib.parse import urlsplit, urlunsplit
+
+import requests
+from requests.compat import urlparse, urlunparse
 
 from odoo import api, models, fields
 from odoo.exceptions import ValidationError, UserError
 from ..services.magento_api import MagentoAPI
-import requests
 
 
 _logger = logging.getLogger(__name__)
@@ -279,7 +280,7 @@ class MagentoInstance(models.Model):
             raise UserError("Magento base URL is required.")
         if "://" not in url:
             url = f"https://{url}"
-        parsed = urlsplit(url)
+        parsed = urlparse(url)
         scheme = (parsed.scheme or "https").lower()
         if scheme not in {"http", "https"}:
             raise UserError("Magento base URL must start with http:// or https://")
@@ -287,7 +288,7 @@ class MagentoInstance(models.Model):
         if not netloc:
             raise UserError("Please provide a valid Magento base URL.")
         path = (parsed.path or "").rstrip("/")
-        return urlunsplit((scheme, netloc, path, "", ""))
+        return urlunparse((scheme, netloc, path, "", "", ""))
 
     def _sanitize_connection_vals(self, vals):
         vals = dict(vals or {})
@@ -651,7 +652,7 @@ class MagentoInstance(models.Model):
                 f"Magento request timed out for '{base_url}'. Check server availability."
             ) from exc
         if isinstance(exc, requests.exceptions.ConnectionError):
-            host = (urlsplit(base_url).hostname or "").strip().lower()
+            host = (urlparse(base_url).hostname or "").strip().lower()
             loopback_hint = ""
             if host in {"localhost", "127.0.0.1", "::1"}:
                 loopback_hint = (
