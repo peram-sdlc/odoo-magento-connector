@@ -288,6 +288,20 @@ class MagentoInstance(models.Model):
         if not netloc:
             raise UserError("Please provide a valid Magento base URL.")
         path = (parsed.path or "").rstrip("/")
+        # Keep only Magento root path.
+        # Users often paste full REST URLs (e.g. /rest/V1), which would duplicate
+        # endpoint prefixes when the connector builds API routes.
+        rest_suffixes = ("/rest/default/v1", "/rest/all/v1", "/rest/v1", "/rest")
+        lowered_path = path.lower()
+        trimmed = True
+        while trimmed and lowered_path:
+            trimmed = False
+            for suffix in rest_suffixes:
+                if lowered_path.endswith(suffix):
+                    path = path[: -len(suffix)].rstrip("/")
+                    lowered_path = path.lower()
+                    trimmed = True
+                    break
         return urlunparse((scheme, netloc, path, "", "", ""))
 
     def _sanitize_connection_vals(self, vals):
@@ -633,7 +647,11 @@ class MagentoInstance(models.Model):
                 if status in (401, 403):
                     extra = " Check the Magento access token permissions for REST API access."
                 elif status == 404:
-                    extra = " Verify base URL and REST endpoint availability (e.g. /rest/V1/store/websites)."
+                    extra = (
+                        " Verify base URL and REST endpoint availability "
+                        "(e.g. /rest/V1/store/websites). Base URL must be Magento root "
+                        "(do not include /rest or /rest/V1)."
+                    )
                 raise UserError(
                     f"Magento HTTP {status}: {body}.{extra}"
                 ) from exc

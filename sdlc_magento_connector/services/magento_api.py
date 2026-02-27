@@ -1,3 +1,5 @@
+import os
+
 import requests
 from requests.compat import urlparse, urlunparse
 from requests.utils import quote
@@ -7,7 +9,7 @@ class MagentoAPI:
         self.instance = instance
         self.base_url = instance.base_url.rstrip("/")
         self._store_code = None
-        self._guest_cart_rest_prefix = "/rest/V156/Q"
+        self._guest_cart_rest_prefix = "/rest/V1"
         self.headers = {"Content-Type": "application/json"}
         access_token = getattr(instance, "access_token", None)
         if isinstance(access_token, str):
@@ -16,7 +18,43 @@ class MagentoAPI:
             self.headers["Authorization"] = f"Bearer {access_token}"
 
         self.verify = bool(instance.verify_ssl)
+        self._container_gateway_ip = self._detect_container_gateway_ip()
         self._base_urls = self._build_base_urls()
+
+    def _is_containerized_runtime(self):
+        # Docker/Podman usually expose one of these markers in Linux containers.
+        if os.path.exists("/.dockerenv") or os.path.exists("/run/.containerenv"):
+            return True
+        try:
+            with open("/proc/1/cgroup", "r", encoding="utf-8") as handle:
+                data = handle.read().lower()
+            return any(token in data for token in ("docker", "podman", "containerd", "kubepods"))
+        except OSError:
+            return False
+
+    def _detect_container_gateway_ip(self):
+        if not self._is_containerized_runtime():
+            return None
+
+        # Resolve the container default gateway from /proc/net/route.
+        try:
+            with open("/proc/net/route", "r", encoding="utf-8") as handle:
+                for line in handle.readlines()[1:]:
+                    parts = line.strip().split()
+                    if len(parts) < 3:
+                        continue
+                    destination = parts[1]
+                    gateway_hex = parts[2]
+                    if destination != "00000000" or gateway_hex == "00000000":
+                        continue
+                    try:
+                        octets = [str(int(gateway_hex[idx:idx + 2], 16)) for idx in (6, 4, 2, 0)]
+                    except ValueError:
+                        return None
+                    return ".".join(octets)
+        except OSError:
+            return None
+        return None
 
     def _build_base_urls(self):
         base_urls = [self.base_url]
@@ -25,35 +63,38 @@ class MagentoAPI:
         if host not in {"localhost", "127.0.0.1", "::1"}:
             return base_urls
 
+        # Only add container-to-host fallbacks when Odoo itself runs in a container.
+        if not self._is_containerized_runtime():
+            return base_urls
+
         # Keep localhost usable in common deployment layouts:
         # - native host: localhost / 127.0.0.1 / ::1
         # - docker/podman container -> host machine:
         #   host.docker.internal / host.containers.internal / gateway.docker.internal
-        # - common Linux Docker bridge gateway: 172.17.0.1
+        # - container default gateway detected from /proc/net/route
+        shared_fallback_hosts = [
+            "host.docker.internal",
+            "host.containers.internal",
+            "gateway.docker.internal",
+        ]
+        if self._container_gateway_ip:
+            shared_fallback_hosts.append(self._container_gateway_ip)
+
         fallback_hosts = {
             "localhost": [
                 "127.0.0.1",
                 "::1",
-                "host.docker.internal",
-                "host.containers.internal",
-                "gateway.docker.internal",
-                "172.17.0.1",
+                *shared_fallback_hosts,
             ],
             "127.0.0.1": [
                 "localhost",
                 "::1",
-                "host.docker.internal",
-                "host.containers.internal",
-                "gateway.docker.internal",
-                "172.17.0.1",
+                *shared_fallback_hosts,
             ],
             "::1": [
                 "localhost",
                 "127.0.0.1",
-                "host.docker.internal",
-                "host.containers.internal",
-                "gateway.docker.internal",
-                "172.17.0.1",
+                *shared_fallback_hosts,
             ],
         }.get(host, [])
 
@@ -90,15 +131,18 @@ class MagentoAPI:
         if original_host not in {"localhost", "127.0.0.1", "::1"}:
             return False
 
-        return host in {
+        localhost_related_hosts = {
             "host.docker.internal",
             "host.containers.internal",
             "gateway.docker.internal",
-            "172.17.0.1",
         }
+        if self._container_gateway_ip:
+            localhost_related_hosts.add(self._container_gateway_ip)
+        return host in localhost_related_hosts
 
     def _request(self, method, endpoint, *, params=None, payload=None):
         last_exc = None
+        primary_exc = None
         for base_url in self._base_urls:
             request_kwargs = {
                 "headers": self.headers,
@@ -125,14 +169,22 @@ class MagentoAPI:
                         response.raise_for_status()
                         return response
                     except requests.exceptions.RequestException as retry_exc:
+                        if base_url == self.base_url and primary_exc is None:
+                            primary_exc = retry_exc
                         last_exc = retry_exc
                         continue
+                if base_url == self.base_url and primary_exc is None:
+                    primary_exc = exc
                 last_exc = exc
                 continue
             except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as exc:
+                if base_url == self.base_url and primary_exc is None:
+                    primary_exc = exc
                 last_exc = exc
                 continue
 
+        if primary_exc is not None:
+            raise primary_exc
         if last_exc is not None:
             raise last_exc
         raise requests.exceptions.RequestException("Magento request failed without response.")
