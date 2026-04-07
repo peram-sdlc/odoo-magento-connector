@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="sdlc_magento_connector.MagentoDashboard">
+        <div class="o_magento_dash_shell o_action_delegate_scroll">
+            <div class="o_magento_dash_scroll">
+                <div class="o_magento_dash_root">
+            <div class="o_magento_dash_header">
+                <div class="o_magento_dash_title_wrap">
+                    <div class="o_magento_dash_title_row">
+                        <h1>Magento Dashboard</h1>
+                        <span class="o_magento_live_badge">
+                            <i class="o_magento_live_dot"/> LIVE
+                        </span>
+                    </div>
+                </div>
+                <div class="o_magento_dash_controls">
+                    <select
+                        class="o_magento_dash_select"
+                        t-att-value="state.instanceId || ''"
+                        t-on-change="onInstanceChange"
+                    >
+                        <option value="">All Instances</option>
+                        <t t-foreach="instances" t-as="instance" t-key="instance.id">
+                            <option t-att-value="instance.id"><t t-esc="instance.name"/></option>
+                        </t>
+                    </select>
+                    <select
+                        class="o_magento_dash_select"
+                        t-att-value="state.days"
+                        t-on-change="onPeriodChange"
+                    >
+                        <option value="8">Last 8 Days</option>
+                        <option value="14">Last 14 Days</option>
+                        <option value="30">Last 30 Days</option>
+                        <option value="60">Last 60 Days</option>
+                    </select>
+                    <button class="o_magento_dash_refresh" t-on-click="onRefreshClick">Refresh</button>
+                </div>
+            </div>
+
+            <t t-if="state.loading">
+                <div class="o_magento_dash_placeholder">Loading live dashboard data...</div>
+            </t>
+            <t t-elif="state.error">
+                <div class="o_magento_dash_error">
+                    <span class="fa fa-exclamation-circle me-2"/> <t t-esc="state.error"/>
+                </div>
+            </t>
+            <t t-elif="hasData">
+                <div class="o_magento_dash_grid o_magento_dash_kpi_grid">
+                    <div class="o_magento_dash_card o_magento_kpi_card o_magento_kpi_primary">
+                        <span class="o_magento_kpi_label">Total Amount</span>
+                        <strong><t t-esc="formatCurrency(kpis.total_sales)"/></strong>
+                        <span class="o_magento_kpi_sub">
+                            Pending Amount: <t t-esc="formatCurrency(kpis.pending_amount)"/>
+                        </span>
+                    </div>
+
+                    <div class="o_magento_dash_card o_magento_kpi_card">
+                        <span class="o_magento_kpi_label">Total Orders</span>
+                        <strong><t t-esc="formatNumber(kpis.total_orders)"/></strong>
+                        <span t-attf-class="o_magento_delta #{deltaClass(kpis.orders_change)}">
+                        </span>
+                    </div>
+
+                    <div class="o_magento_dash_card o_magento_kpi_card">
+                        <span class="o_magento_kpi_label">Delivered Orders</span>
+                        <strong><t t-esc="formatNumber(kpis.delivered_orders)"/></strong>
+                        <span class="o_magento_delta o_magento_delta_up">
+                        </span>
+                    </div>
+
+                    <div class="o_magento_dash_card o_magento_kpi_card">
+                        <span class="o_magento_kpi_label">Not Delivered Orders</span>
+                        <strong><t t-esc="formatNumber(kpis.not_delivered_orders)"/></strong>
+                        <span class="o_magento_delta o_magento_delta_down">
+                            <t t-esc="formatNumber(kpis.not_delivered_orders)"/> pending fulfillment
+                        </span>
+                    </div>
+
+                    <div class="o_magento_dash_card o_magento_kpi_card">
+                        <span class="o_magento_kpi_label">Total Customers</span>
+                        <strong><t t-esc="formatNumber(kpis.total_customers)"/></strong>
+                        <span t-attf-class="o_magento_delta #{deltaClass(kpis.customers_change)}">
+                            <t t-esc="formatPercent(kpis.customers_change)"/> vs previous period
+                        </span>
+                    </div>
+
+                    <div class="o_magento_dash_card o_magento_kpi_card">
+                        <span class="o_magento_kpi_label">Total Products</span>
+                        <strong><t t-esc="formatNumber(kpis.total_products)"/></strong>
+                        <span t-attf-class="o_magento_delta #{deltaClass(kpis.products_change)}">
+                            <t t-esc="formatPercent(kpis.products_change)"/> vs previous period
+                        </span>
+                    </div>
+                </div>
+
+                <div class="o_magento_dash_grid o_magento_dash_main_grid">
+                    <div class="o_magento_dash_card o_magento_chart_card">
+                        <div class="o_magento_card_head">
+                            <h2>Revenue Analytics</h2>
+                            <span class="o_magento_chip"><t t-esc="state.days"/> days</span>
+                        </div>
+                        <svg viewBox="0 0 560 220" class="o_magento_chart_svg">
+                            <path class="o_magento_sales_area" t-att-d="salesAreaPath"/>
+                            <polyline class="o_magento_sales_line" t-att-points="salesPolyline"/>
+                            <polyline class="o_magento_orders_line" t-att-points="ordersPolyline"/>
+                        </svg>
+                        <div class="o_magento_chart_legend">
+                            <span><i class="o_magento_dot o_magento_dot_sales"/> Revenue</span>
+                            <span><i class="o_magento_dot o_magento_dot_orders"/> Orders</span>
+                        </div>
+                        <div class="o_magento_x_axis">
+                            <t t-foreach="chartLabels" t-as="label" t-key="label">
+                                <span><t t-esc="label"/></span>
+                            </t>
+                        </div>
+                    </div>
+
+                    <div class="o_magento_dash_card o_magento_target_card">
+                         <div class="o_magento_card_head">
+                            <h2>Order Status Mix</h2>
+                        </div>
+                        <t t-if="orderStatus.length">
+                            <t t-foreach="orderStatus" t-as="row" t-key="row.label">
+                                <div class="o_magento_status_row">
+                                    <span class="o_magento_status_name"><t t-esc="row.label"/></span>
+                                    <span class="o_magento_status_count"><t t-esc="formatNumber(row.count)"/></span>
+                                    <div class="o_magento_status_track">
+                                        <span class="o_magento_status_fill" t-att-style="barWidthStyle(row.share)"/>
+                                    </div>
+                                </div>
+                            </t>
+                        </t>
+                    </div>
+
+                    <div class="o_magento_dash_card o_magento_categories_card">
+                        <div class="o_magento_card_head">
+                            <h2>Top Categories</h2>
+                        </div>
+                        <div class="o_magento_donut_wrap">
+                            <div class="o_magento_donut" t-att-style="categoryDonutStyle">
+                                <div class="o_magento_donut_center">
+                                    <span>Total</span>
+                                    <strong><t t-esc="formatNumber(totalCategoryValue)"/></strong>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="o_magento_category_list">
+                            <t t-foreach="topCategoriesStyled" t-as="row" t-key="row.name">
+                                <div class="o_magento_category_item">
+                                    <span class="o_magento_category_name">
+                                        <i class="o_magento_category_swatch" t-attf-style="background: #{row.color};"/>
+                                        <t t-esc="row.name"/>
+                                    </span>
+                                    <span class="o_magento_category_value"><t t-esc="formatNumber(row.value)"/></span>
+                                </div>
+                            </t>
+                        </div>
+                    </div>
+                </div>
+
+                <div t-attf-class="o_magento_dash_grid o_magento_dash_bottom_grid #{topCountries.length ? '' : 'o_magento_dash_bottom_grid_single'}">
+                    <t t-if="topCountries.length">
+                        <div class="o_magento_dash_card">
+                            <div class="o_magento_card_head">
+                                <h2>Top Countries</h2>
+                            </div>
+                            <t t-foreach="topCountries" t-as="row" t-key="row.name">
+                                <div class="o_magento_progress_row">
+                                    <div class="o_magento_progress_head">
+                                        <span><t t-esc="row.name"/></span>
+                                        <span><t t-esc="formatPercent(row.share)"/></span>
+                                    </div>
+                                    <div class="o_magento_progress_track">
+                                        <span class="o_magento_progress_fill" t-att-style="barWidthStyle(row.share)"/>
+                                    </div>
+                                </div>
+                            </t>
+                        </div>
+                    </t>
+
+                    <div t-attf-class="o_magento_dash_card #{topCountries.length ? '' : 'o_magento_dash_card_full'}">
+                        <div class="o_magento_card_head">
+                            <h2>Sync Health</h2>
+                        </div>
+                        <div class="o_magento_sync_stats">
+                            <div>
+                                <span>Manual Runs</span>
+                                <strong><t t-esc="formatNumber(syncHealth.manual_runs)"/></strong>
+                            </div>
+                            <div>
+                                <span>Cron Runs</span>
+                                <strong><t t-esc="formatNumber(syncHealth.cron_runs)"/></strong>
+                            </div>
+                            <div>
+                                <span>Success Records</span>
+                                <strong><t t-esc="formatNumber(syncHealth.success_records)"/></strong>
+                            </div>
+                            <div>
+                                <span>Error Records</span>
+                                <strong><t t-esc="formatNumber(syncHealth.error_records)"/></strong>
+                            </div>
+                        </div>
+                        <div class="o_magento_sync_last">
+                            Last sync: <t t-esc="formatDateTime(syncHealth.last_sync_at)"/>
+                        </div>
+                        <div class="o_magento_sync_tail">
+                            Avg Order Value: <strong><t t-esc="formatCurrency(kpis.avg_order_value)"/></strong>
+                            <span class="ms-3">Delivered Rate: <strong><t t-esc="formatPercent(kpis.delivered_rate)"/></strong></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="o_magento_dash_footer">
+                    Last refreshed at <t t-esc="formatDateTime(data.generated_at)"/>
+                </div>
+            </t>
+                </div>
+            </div>
+        </div>
+    </t>
+</templates>

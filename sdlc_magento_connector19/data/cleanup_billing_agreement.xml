@@ -1,0 +1,5 @@
+<odoo>
+    <data noupdate="1">
+        <function model="magento.instance" name="_cleanup_legacy_billing_agreement_artifacts"/>
+    </data>
+</odoo>
