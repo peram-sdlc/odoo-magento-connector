@@ -4,21 +4,20 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Odoo Magento 2 Connector — Seamless Integration</title>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #06050f;
-    --surface: #0e0c1e;
-    --surface2: #14112a;
-    --border: rgba(255,255,255,0.07);
+    --bg: #f8f7fc;
+    --surface: #ffffff;
+    --surface2: #f0eef7;
+    --border: rgba(0,0,0,0.08);
     --odoo: #7c3aed;
-    --odoo-light: #a78bfa;
-    --magento: #f97316;
-    --magento-light: #fb923c;
-    --accent: #e879f9;
-    --text: #f1f0ff;
-    --muted: #8b8aab;
-    --card-glow: rgba(124,58,237,0.15);
+    --odoo-light: #6d28d9;
+    --magento: #ea580c;
+    --magento-light: #c2410c;
+    --accent: #c026d3;
+    --text: #1a1633;
+    --muted: #64618a;
+    --card-glow: rgba(124,58,237,0.08);
   }
 
   *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -28,7 +27,7 @@
   body {
     background: var(--bg);
     color: var(--text);
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Arial Narrow', Arial, Helvetica, sans-serif;
     font-size: 16px;
     line-height: 1.7;
     overflow-x: hidden;
@@ -42,7 +41,7 @@
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
     pointer-events: none;
     z-index: 0;
-    opacity: 0.6;
+    opacity: 0.15;
   }
 
   /* ── GLOW ORBS ── */
@@ -52,14 +51,14 @@
     filter: blur(120px);
     pointer-events: none;
     z-index: 0;
-    opacity: 0.25;
+    opacity: 0.08;
   }
   .orb-1 { width: 600px; height: 600px; background: var(--odoo); top: -200px; right: -150px; }
   .orb-2 { width: 500px; height: 500px; background: var(--magento); bottom: 10%; left: -200px; }
   .orb-3 { width: 400px; height: 400px; background: var(--accent); top: 40%; left: 50%; transform: translateX(-50%); opacity: 0.12; }
 
   /* ── TYPOGRAPHY ── */
-  h1, h2, h3, h4 { font-family: 'Syne', sans-serif; }
+  h1, h2, h3, h4 { font-family: 'Arial Narrow', Arial, Helvetica, sans-serif; }
 
   .section-label {
     display: inline-flex;
@@ -70,8 +69,8 @@
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--odoo-light);
-    background: rgba(124,58,237,0.12);
-    border: 1px solid rgba(124,58,237,0.3);
+    background: rgba(124,58,237,0.08);
+    border: 1px solid rgba(124,58,237,0.2);
     padding: 5px 14px;
     border-radius: 100px;
     margin-bottom: 20px;
@@ -92,8 +91,8 @@
     padding: 18px 60px;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    background: rgba(6,5,15,0.75);
+    justify-content: center;
+    background: rgba(248,247,252,0.85);
     backdrop-filter: blur(20px);
     border-bottom: 1px solid var(--border);
   }
@@ -102,7 +101,7 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    font-family: 'Syne', sans-serif;
+    font-family: 'Arial Narrow', Arial, Helvetica, sans-serif;
     font-weight: 700;
     font-size: 15px;
     letter-spacing: -0.02em;
@@ -121,8 +120,8 @@
     font-weight: 600;
     letter-spacing: 0.03em;
   }
-  .badge-odoo { background: rgba(124,58,237,0.2); color: var(--odoo-light); border: 1px solid rgba(124,58,237,0.4); }
-  .badge-magento { background: rgba(249,115,22,0.15); color: var(--magento-light); border: 1px solid rgba(249,115,22,0.35); }
+  .badge-odoo { background: rgba(124,58,237,0.1); color: var(--odoo-light); border: 1px solid rgba(124,58,237,0.25); }
+  .badge-magento { background: rgba(249,115,22,0.1); color: var(--magento-light); border: 1px solid rgba(249,115,22,0.25); }
 
   .nav-tabs {
     display: flex;
@@ -159,7 +158,7 @@
     border: 1px solid var(--border);
     background: transparent;
     color: var(--text);
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Arial Narrow', Arial, Helvetica, sans-serif;
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
@@ -173,7 +172,7 @@
     border: none;
     background: linear-gradient(135deg, var(--odoo), #6d28d9);
     color: #fff;
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Arial Narrow', Arial, Helvetica, sans-serif;
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
@@ -186,7 +185,7 @@
   .hero {
     position: relative;
     z-index: 1;
-    padding: 120px 60px 100px;
+    padding: 30px 60px 50px;
     text-align: center;
     max-width: 1100px;
     margin: 0 auto;
@@ -211,7 +210,7 @@
     font-size: 18px;
     color: var(--muted);
     max-width: 640px;
-    margin: 0 auto 50px;
+    margin: 0 auto 30px;
     font-weight: 300;
   }
 
@@ -220,13 +219,13 @@
     gap: 14px;
     justify-content: center;
     flex-wrap: wrap;
-    margin-bottom: 70px;
+    margin-bottom: 40px;
   }
 
   .btn-hero {
     padding: 14px 32px;
     border-radius: 14px;
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Arial Narrow', Arial, Helvetica, sans-serif;
     font-size: 15px;
     font-weight: 600;
     cursor: pointer;
@@ -244,7 +243,7 @@
     border: 1.5px solid var(--border);
     color: var(--text);
   }
-  .btn-hero-secondary:hover { border-color: rgba(255,255,255,0.3); background: rgba(255,255,255,0.04); }
+  .btn-hero-secondary:hover { border-color: rgba(0,0,0,0.2); background: rgba(0,0,0,0.03); }
 
   .hero-stats {
     display: flex;
@@ -257,7 +256,7 @@
     text-align: center;
   }
   .stat-num {
-    font-family: 'Syne', sans-serif;
+    font-family: 'Arial Narrow', Arial, Helvetica, sans-serif;
     font-size: 36px;
     font-weight: 800;
     background: linear-gradient(135deg, var(--odoo-light), var(--magento-light));
@@ -282,11 +281,11 @@
     z-index: 1;
     max-width: 1200px;
     margin: 0 auto;
-    padding: 100px 60px;
+    padding: 50px 60px;
   }
 
   .section-header {
-    margin-bottom: 60px;
+    margin-bottom: 36px;
   }
   .section-header.center { text-align: center; }
   .section-header h2 {
@@ -332,9 +331,9 @@
   }
 
   .feature-card:hover {
-    border-color: rgba(124,58,237,0.4);
+    border-color: rgba(124,58,237,0.3);
     transform: translateY(-4px);
-    box-shadow: 0 20px 60px rgba(124,58,237,0.15);
+    box-shadow: 0 20px 60px rgba(124,58,237,0.1);
   }
   .feature-card:hover::before { opacity: 1; }
 
@@ -351,10 +350,10 @@
     z-index: 1;
   }
 
-  .icon-purple { background: rgba(124,58,237,0.18); border: 1px solid rgba(124,58,237,0.3); }
-  .icon-orange { background: rgba(249,115,22,0.15); border: 1px solid rgba(249,115,22,0.3); }
-  .icon-pink   { background: rgba(232,121,249,0.15); border: 1px solid rgba(232,121,249,0.3); }
-  .icon-blue   { background: rgba(59,130,246,0.15);  border: 1px solid rgba(59,130,246,0.3);  }
+  .icon-purple { background: rgba(124,58,237,0.1); border: 1px solid rgba(124,58,237,0.2); }
+  .icon-orange { background: rgba(249,115,22,0.1); border: 1px solid rgba(249,115,22,0.2); }
+  .icon-pink   { background: rgba(232,121,249,0.1); border: 1px solid rgba(232,121,249,0.2); }
+  .icon-blue   { background: rgba(59,130,246,0.1);  border: 1px solid rgba(59,130,246,0.2);  }
 
   .feature-card h3 {
     font-size: 17px;
@@ -449,7 +448,7 @@
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 28px;
-    padding: 60px;
+    padding: 5px 20px;
     position: relative;
     overflow: hidden;
   }
@@ -458,7 +457,7 @@
     content: '';
     position: absolute;
     width: 400px; height: 400px;
-    background: radial-gradient(circle, rgba(124,58,237,0.12), transparent 70%);
+    background: radial-gradient(circle, rgba(124,58,237,0.05), transparent 70%);
     top: 50%; left: 50%;
     transform: translate(-50%, -50%);
     pointer-events: none;
@@ -469,14 +468,14 @@
     align-items: center;
     justify-content: center;
     gap: 0;
-    margin-top: 50px;
+    margin-top: 0;
     position: relative;
     z-index: 1;
   }
 
   .sync-platform {
     text-align: center;
-    padding: 32px 48px;
+    padding: 10px 20px;
   }
 
   .platform-logo {
@@ -489,11 +488,11 @@
     margin: 0 auto 14px;
     border: 1px solid var(--border);
   }
-  .platform-logo.odoo-logo { background: rgba(124,58,237,0.15); }
-  .platform-logo.magento-logo { background: rgba(249,115,22,0.12); }
+  .platform-logo.odoo-logo { background: rgba(124,58,237,0.08); }
+  .platform-logo.magento-logo { background: rgba(249,115,22,0.08); }
 
   .platform-name {
-    font-family: 'Syne', sans-serif;
+    font-family: 'Arial Narrow', Arial, Helvetica, sans-serif;
     font-size: 18px;
     font-weight: 700;
   }
@@ -545,8 +544,8 @@
     border-radius: 100px;
     text-transform: uppercase;
   }
-  .arrow-label.export { background: rgba(124,58,237,0.15); color: var(--odoo-light); }
-  .arrow-label.import { background: rgba(249,115,22,0.12); color: var(--magento-light); }
+  .arrow-label.export { background: rgba(124,58,237,0.08); color: var(--odoo-light); }
+  .arrow-label.import { background: rgba(249,115,22,0.08); color: var(--magento-light); }
 
   .sync-items {
     display: flex;
@@ -572,9 +571,9 @@
     gap: 6px;
   }
   .sync-chip:hover {
-    border-color: rgba(124,58,237,0.4);
+    border-color: rgba(124,58,237,0.3);
     color: var(--odoo-light);
-    background: rgba(124,58,237,0.08);
+    background: rgba(124,58,237,0.06);
   }
   .sync-chip .dot {
     width: 5px; height: 5px;
@@ -604,14 +603,14 @@
     transition: all 0.2s;
   }
   .feat-item:hover {
-    border-color: rgba(124,58,237,0.3);
+    border-color: rgba(124,58,237,0.2);
     color: var(--text);
   }
   .feat-item .check {
     width: 20px; height: 20px;
     border-radius: 6px;
-    background: rgba(124,58,237,0.18);
-    border: 1px solid rgba(124,58,237,0.35);
+    background: rgba(124,58,237,0.1);
+    border: 1px solid rgba(124,58,237,0.2);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -640,16 +639,16 @@
   }
 
   .job-card:hover {
-    border-color: rgba(124,58,237,0.35);
+    border-color: rgba(124,58,237,0.25);
     transform: translateY(-3px);
-    box-shadow: 0 16px 50px rgba(124,58,237,0.12);
+    box-shadow: 0 16px 50px rgba(124,58,237,0.08);
   }
 
   .job-icon {
     width: 60px; height: 60px;
     border-radius: 18px;
-    background: rgba(124,58,237,0.12);
-    border: 1px solid rgba(124,58,237,0.25);
+    background: rgba(124,58,237,0.08);
+    border: 1px solid rgba(124,58,237,0.18);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -673,7 +672,7 @@
     background: var(--surface);
     border-radius: 32px;
     border: 1px solid var(--border);
-    padding: 70px;
+    padding: 50px;
     position: relative;
     overflow: hidden;
     text-align: center;
@@ -683,7 +682,7 @@
     content: '';
     position: absolute;
     width: 600px; height: 300px;
-    background: radial-gradient(ellipse, rgba(124,58,237,0.18), transparent 70%);
+    background: radial-gradient(ellipse, rgba(124,58,237,0.06), transparent 70%);
     top: -100px; left: 50%;
     transform: translateX(-50%);
     pointer-events: none;
@@ -725,13 +724,13 @@
     cursor: pointer;
   }
   .channel-card:hover {
-    border-color: rgba(124,58,237,0.4);
+    border-color: rgba(124,58,237,0.3);
     transform: translateY(-3px);
-    box-shadow: 0 12px 40px rgba(124,58,237,0.15);
+    box-shadow: 0 12px 40px rgba(124,58,237,0.1);
   }
   .channel-icon { font-size: 32px; margin-bottom: 12px; }
   .channel-name {
-    font-family: 'Syne', sans-serif;
+    font-family: 'Arial Narrow', Arial, Helvetica, sans-serif;
     font-size: 15px;
     font-weight: 700;
     margin-bottom: 6px;
@@ -766,9 +765,9 @@
     gap: 6px;
     font-size: 11px;
     font-weight: 600;
-    color: #4ade80;
-    background: rgba(74,222,128,0.1);
-    border: 1px solid rgba(74,222,128,0.25);
+    color: #16a34a;
+    background: rgba(22,163,74,0.08);
+    border: 1px solid rgba(22,163,74,0.2);
     padding: 4px 10px;
     border-radius: 100px;
     margin-left: 10px;
@@ -777,7 +776,7 @@
   .live-dot {
     width: 6px; height: 6px;
     border-radius: 50%;
-    background: #4ade80;
+    background: #16a34a;
     animation: pulse-dot 1.5s ease infinite;
   }
 
@@ -785,12 +784,12 @@
   @media (max-width: 900px) {
     nav { padding: 16px 24px; }
     .nav-tabs, .nav-cta { display: none; }
-    .hero { padding: 80px 24px 70px; }
-    .section { padding: 70px 24px; }
+    .hero { padding: 24px 24px 40px; }
+    .section { padding: 40px 24px; }
     .ops-grid, .feature-list-grid { grid-template-columns: 1fr; }
     .jobs-grid { grid-template-columns: 1fr 1fr; }
     .sync-row { flex-direction: column; }
-    .contact-section { padding: 50px 28px; }
+    .contact-section { padding: 36px 24px; }
     .divider { margin: 0 24px; }
     .hero-stats { gap: 36px; }
   }
@@ -820,18 +819,6 @@
     </div>
     <span style="color:var(--muted); font-weight:400;">Connector</span>
   </div>
-
-  <div class="nav-tabs">
-    <div class="nav-tab active">Features</div>
-    <div class="nav-tab">Screenshots</div>
-    <div class="nav-tab">Support</div>
-    <div class="nav-tab">FAQs</div>
-  </div>
-
-  <div class="nav-cta">
-    <button class="btn-ghost">Live Demo</button>
-    <button class="btn-primary">Get Instant Demo →</button>
-  </div>
 </nav>
 
 <!-- HERO -->
@@ -842,7 +829,6 @@
 
   <h1 class="animate-up delay-1">
     Sync Odoo &amp; Magento 2<br>
-    <span class="gradient-text">Without the Headaches</span>
   </h1>
 
   <p class="animate-up delay-2">
@@ -1091,24 +1077,22 @@
   </div>
 </section>
 
-<div class="divider"></div>
-
 <!-- CONTACT / CTA -->
-<section class="section">
+<section class="section" style="padding-top: 20px;">
   <div class="contact-section">
     <h2>Ready to Connect?</h2>
     <p>Get a personalized demo or reach us directly on email or WhatsApp.</p>
 
     <div class="contact-channels">
-      <div class="channel-card">
+      <div class="channel-card" onclick="window.location.href='mailto:sales@sdlccorp.com';" style="cursor:pointer;">
         <div class="channel-icon">📧</div>
         <div class="channel-name">Email Us</div>
-        <div class="channel-desc">support@syncduo.com<br>Response within 4 hours</div>
+        <div class="channel-desc">sales@sdlccorp.com<br>Response within 30 minutes</div>
       </div>
-      <div class="channel-card" style="border-color: rgba(37,211,102,0.25);">
+      <div class="channel-card" style="border-color: rgba(37,211,102,0.25); cursor:pointer;" onclick="window.open('https://wa.me/918920944210','_blank');">
         <div class="channel-icon">💬</div>
         <div class="channel-name">WhatsApp</div>
-        <div class="channel-desc">Chat with us instantly<br>Scan QR to connect</div>
+        <div class="channel-desc">+91 89209 44210<br>Chat with us instantly</div>
       </div>
       <div class="channel-card">
         <div class="channel-icon">🎯</div>
@@ -1125,18 +1109,6 @@
   </div>
 </section>
 
-<!-- FOOTER -->
-<footer style="text-align:center; padding: 40px 60px; border-top: 1px solid var(--border); color: var(--muted); font-size: 13px; position: relative; z-index: 1;">
-  <div style="display:flex; align-items:center; justify-content:center; gap: 24px; flex-wrap:wrap;">
-    <span>© 2026 Odoo Magento 2 Connector</span>
-    <span style="color:var(--border);">|</span>
-    <span>Built for Odoo 14.0 – 17.0</span>
-    <span style="color:var(--border);">|</span>
-    <span>Magento 2.3.x – 2.4.x</span>
-    <span style="color:var(--border);">|</span>
-    <a href="#" style="color: var(--odoo-light); text-decoration:none;">View on Odoo Apps Store</a>
-  </div>
-</footer>
 
 <script>
   // Animate feature cards on scroll
