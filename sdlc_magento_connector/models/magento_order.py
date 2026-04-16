@@ -5,7 +5,6 @@ from odoo import models, fields, api
 from odoo.exceptions import UserError
 from ..services.magento_api import MagentoAPI
 
-
 class MagentoOrder(models.Model):
     _name = "magento.order"
     _description = "Magento Order"
