@@ -99,19 +99,20 @@ class StockPicking(models.Model):
             picking.magento_ship_to_name = partner.name if partner else False
 
     @api.depends(
-        "move_ids_without_package.product_uom_qty",
-        "move_ids_without_package.quantity",
-        "move_ids_without_package.state",
+        "move_ids.product_uom_qty",
+        "move_ids.quantity_done",
+        "move_ids.state",
+        "move_ids.package_level_id",
         "state",
     )
     def _compute_magento_total_qty(self):
         for picking in self:
             qty = 0.0
-            for move in picking.move_ids_without_package:
+            for move in picking.move_ids.filtered(lambda m: not m.package_level_id):
                 if move.state == "cancel":
                     continue
-                if move.quantity:
-                    qty += move.quantity
+                if move.quantity_done:
+                    qty += move.quantity_done
                 else:
                     qty += move.product_uom_qty
             picking.magento_total_qty = qty
@@ -138,7 +139,7 @@ class StockPicking(models.Model):
             sale_line = move.sale_line_id if "sale_line_id" in move._fields else False
             if not sale_line or not sale_line.magento_item_id:
                 continue
-            qty = float(move.quantity or 0.0)
+            qty = float(move.quantity_done or 0.0)
             if qty <= 0:
                 qty = float(move.product_uom_qty or 0.0)
             if qty <= 0:

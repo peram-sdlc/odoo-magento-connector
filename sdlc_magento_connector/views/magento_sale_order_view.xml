@@ -13,22 +13,22 @@
                 <button name="action_create_magento_order"
                         type="object"
                         string="Create in Magento"
-                        class="oe_highlight"
-                        modifiers="{'invisible': ['|', ['magento_order_id','!=',False], ['is_shopify_order','=',True]]}"/>
+                        class="oe_highlight" attrs="{'invisible': ['|', ('magento_order_id', '!=', False), ('magento_instance_id', '=', False)]}"
+/>
                 <button name="action_pull_magento_order"
                         type="object"
                         string="Pull from Magento"
-                        class="btn-secondary"
-                        modifiers="{'invisible': ['|', ['magento_order_id','=',False], ['is_shopify_order','=',True]]}"/>
+                        class="btn-secondary" attrs="{'invisible': ['|', ('magento_order_id', '=', False), ('magento_instance_id', '=', False)]}"
+/>
                 <button name="action_update_magento_order"
                         type="object"
                         string="Update in Magento"
-                        class="btn-secondary"
-                        modifiers="{'invisible': ['|', ['magento_order_id','=',False], ['is_shopify_order','=',True]]}"/>
+                        class="btn-secondary" attrs="{'invisible': ['|', ('magento_order_id', '=', False), ('magento_instance_id', '=', False)]}"
+/>
             </xpath>
 
             <xpath expr="//form/sheet/group" position="after">
-                <group string="Magento" invisible="not is_magento_order">
+                <group string="Magento" attrs="{'invisible': [('is_magento_order', '=', False)]}">
                     <field name="magento_instance_id"/>
                     <field name="magento_order_id" readonly="1"/>
                     <field name="magento_increment_id" readonly="1"/>
@@ -51,11 +51,14 @@
         <field name="model">sale.order</field>
         <field name="inherit_id" ref="sale.view_order_form"/>
         <field name="arch" type="xml">
+            <xpath expr="//button[@id='create_invoice']" position="before">
+                <field name="magento_invoice_state" invisible="1"/>
+            </xpath>
             <xpath expr="//button[@id='create_invoice']" position="attributes">
-                <attribute name="invisible">invoice_status != 'to invoice' or magento_invoice_state in ('partial','invoiced')</attribute>
+                <attribute name="attrs">{'invisible': ['|', ('invoice_status', '!=', 'to invoice'), ('magento_invoice_state', 'in', ('partial', 'invoiced'))]}</attribute>
             </xpath>
             <xpath expr="//button[@id='create_invoice_percentage']" position="attributes">
-                <attribute name="invisible">invoice_status != 'no' or state != 'sale' or magento_invoice_state in ('partial','invoiced')</attribute>
+                <attribute name="attrs">{'invisible': ['|', '|', ('invoice_status', '!=', 'no'), ('state', '!=', 'sale'), ('magento_invoice_state', 'in', ('partial', 'invoiced'))]}</attribute>
             </xpath>
         </field>
     </record>
@@ -65,7 +68,7 @@
         <field name="model">sale.order</field>
         <field name="inherit_id" ref="sale.view_order_tree"/>
         <field name="arch" type="xml">
-            <xpath expr="//list/field[@name='name']" position="after">
+            <xpath expr="//tree/field[@name='name']" position="after">
                 <field name="magento_instance_id"/>
             </xpath>
         </field>
@@ -76,7 +79,7 @@
         <field name="model">sale.order</field>
         <field name="inherit_id" eval="False"/>
         <field name="arch" type="xml">
-            <list string="Magento Orders" import="0">
+            <tree string="Magento Orders" import="0">
                 <field name="name"/>
                 <field name="date_order"/>
                 <field name="partner_id"/>
@@ -89,7 +92,7 @@
                 <field name="magento_payment_state"/>
                 <field name="magento_total_paid"/>
                 <field name="delivery_status"/>
-            </list>
+            </tree>
         </field>
     </record>
 
@@ -97,7 +100,7 @@
         <field name="name">sale.order.tree.magento.cancelled.report</field>
         <field name="model">sale.order</field>
         <field name="arch" type="xml">
-            <list string="Magento Cancelled Orders" create="0" edit="0" delete="0" import="0">
+            <tree string="Magento Cancelled Orders" create="0" edit="0" delete="0" import="0">
                 <field name="name"/>
                 <field name="date_order"/>
                 <field name="magento_order_id"/>
@@ -105,7 +108,7 @@
                 <field name="magento_customer_email"/>
                 <field name="magento_payment_state"/>
                 <field name="state"/>
-            </list>
+            </tree>
         </field>
     </record>
 </odoo>

@@ -2,7 +2,6 @@
 
 import { registry } from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
-import { standardActionServiceProps } from "@web/webclient/actions/action_service";
 
 import { Component, onMounted, onWillStart, onWillUnmount, useState } from "@odoo/owl";
 
@@ -10,7 +9,7 @@ const CATEGORY_COLORS = ["#ff8a00", "#ffac2f", "#ffc768", "#ffdc9a", "#ffe9c6", 
 
 export class MagentoDashboard extends Component {
     static template = "sdlc_magento_connector.MagentoDashboard";
-    static props = { ...standardActionServiceProps };
+    static props = ["*"];
 
     setup() {
         this.orm = useService("orm");

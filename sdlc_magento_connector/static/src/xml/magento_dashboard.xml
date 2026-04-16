@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <templates xml:space="preserve">
-    <t t-name="sdlc_magento_connector.MagentoDashboard">
+    <t t-name="sdlc_magento_connector.MagentoDashboard" owl="1">
         <div class="o_magento_dash_shell o_action_delegate_scroll">
             <div class="o_magento_dash_scroll">
                 <div class="o_magento_dash_root">

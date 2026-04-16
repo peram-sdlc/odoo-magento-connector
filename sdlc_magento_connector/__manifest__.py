@@ -4,7 +4,8 @@
     'category': 'Connector',
     'summary': 'Magento 2 Connector for Odoo',
     'author': 'SDLC Corp',
-    'depends': ['base', 'product', 'sale', 'account', 'stock'],
+    'license': 'LGPL-3',
+    'depends': ['base', 'product', 'sale', 'sale_stock', 'account', 'stock'],
     'data': [
         'security/ir.model.access.csv',
         'data/cleanup_billing_agreement.xml',

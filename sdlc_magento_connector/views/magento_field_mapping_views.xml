@@ -27,14 +27,14 @@ action = env['magento.field.mapping'].with_context(
         <record id="action_magento_field_mapping" model="ir.actions.act_window">
             <field name="name">Magento Field Mapping</field>
             <field name="res_model">magento.field.mapping</field>
-            <field name="view_mode">list,form</field>
+            <field name="view_mode">tree,form</field>
             <field name="search_view_id" ref="view_magento_field_mapping_search"/>
         </record>
 
         <record id="action_magento_field_mapping_product" model="ir.actions.act_window">
             <field name="name">Product Mapping</field>
             <field name="res_model">magento.field.mapping</field>
-            <field name="view_mode">list,form</field>
+            <field name="view_mode">tree,form</field>
             <field name="search_view_id" ref="view_magento_field_mapping_search"/>
             <field name="domain">[('mapping_type', '=', 'product')]</field>
             <field name="context">{'default_mapping_type': 'product'}</field>
@@ -43,7 +43,7 @@ action = env['magento.field.mapping'].with_context(
         <record id="action_magento_field_mapping_customer" model="ir.actions.act_window">
             <field name="name">Customer Mapping</field>
             <field name="res_model">magento.field.mapping</field>
-            <field name="view_mode">list,form</field>
+            <field name="view_mode">tree,form</field>
             <field name="search_view_id" ref="view_magento_field_mapping_search"/>
             <field name="domain">[('mapping_type', '=', 'customer')]</field>
             <field name="context">{'default_mapping_type': 'customer'}</field>
@@ -52,7 +52,7 @@ action = env['magento.field.mapping'].with_context(
         <record id="action_magento_field_mapping_category" model="ir.actions.act_window">
             <field name="name">Category Mapping</field>
             <field name="res_model">magento.field.mapping</field>
-            <field name="view_mode">list,form</field>
+            <field name="view_mode">tree,form</field>
             <field name="search_view_id" ref="view_magento_field_mapping_search"/>
             <field name="domain">[('mapping_type', '=', 'category')]</field>
             <field name="context">{'default_mapping_type': 'category'}</field>
@@ -79,7 +79,7 @@ action = env['magento.field.mapping'].with_context(
             <field name="name">magento.mapping.report.list</field>
             <field name="model">magento.mapping.report</field>
             <field name="arch" type="xml">
-                <list string="Magento Mapping Report" create="0" edit="0" delete="0" import="0">
+                <tree string="Magento Mapping Report" create="0" edit="0" delete="0" import="0">
                     <field name="instance_id"/>
                     <field name="mapping_type"/>
                     <field name="direction"/>
@@ -87,7 +87,7 @@ action = env['magento.field.mapping'].with_context(
                     <field name="status"/>
                     <field name="record_name"/>
                     <field name="create_date"/>
-                </list>
+                </tree>
             </field>
         </record>
 
@@ -108,14 +108,14 @@ action = env['magento.field.mapping'].with_context(
                         <notebook>
                             <page string="Changes">
                                 <field name="line_ids" nolabel="1" readonly="1">
-                                    <list create="0" import="0" delete="0">
+                                    <tree create="0" import="0" delete="0">
                                         <field name="scope"/>
                                         <field name="odoo_field"/>
                                         <field name="magento_field"/>
                                         <field name="old_value"/>
                                         <field name="new_value"/>
                                         <field name="applied"/>
-                                    </list>
+                                    </tree>
                                 </field>
                             </page>
                             <page string="Payload">
@@ -133,37 +133,26 @@ action = env['magento.field.mapping'].with_context(
         <record id="action_magento_mapping_report" model="ir.actions.act_window">
             <field name="name">Mapping Report</field>
             <field name="res_model">magento.mapping.report</field>
-            <field name="view_mode">list,form</field>
+            <field name="view_mode">tree,form</field>
             <field name="domain">[]</field>
             <field name="context">{}</field>
             <field name="search_view_id" ref="view_magento_mapping_report_search"/>
-            <field name="views" eval="[(ref('view_magento_mapping_report_list'), 'list'), (ref('view_magento_mapping_report_form'), 'form')]"/>
+            <field name="views" eval="[(ref('view_magento_mapping_report_list'), 'tree'), (ref('view_magento_mapping_report_form'), 'form')]"/>
         </record>
 
         <record id="view_magento_field_mapping_list" model="ir.ui.view">
             <field name="name">magento.field.mapping.list</field>
             <field name="model">magento.field.mapping</field>
             <field name="arch" type="xml">
-                <list string="Magento Field Mapping" editable="bottom">
-                    <header>
-                        <button name="%(action_magento_field_mapping_test_all)d"
-                                type="action"
-                                string="Test"
-                                class="btn-secondary me-2"
-                                display="always"/>
-                        <button name="action_sync_magento_fields"
-                                type="object"
-                                string="Load New Fields"
-                                class="btn-success"
-                                display="always"/>
-                    </header>
+                <tree string="Magento Field Mapping" editable="bottom">
                     <field name="mapping_type" readonly="1"/>
                     <field name="instance_id"/>
+                    <field name="odoo_model_id" invisible="1"/>
                     <field name="odoo_field" domain="[('model_id', '=', odoo_model_id)]"/>
                     <field name="magento_field_id"
                            domain="[('instance_id', '=', instance_id), ('mapping_type', '=', mapping_type)]"/>
                     <field name="active"/>
-                </list>
+                </tree>
             </field>
         </record>
 
@@ -173,6 +162,14 @@ action = env['magento.field.mapping'].with_context(
             <field name="arch" type="xml">
                 <form string="Magento Field Mapping">
                     <header>
+                        <button name="%(action_magento_field_mapping_test_all)d"
+                                type="action"
+                                string="Test All"
+                                class="btn-secondary"/>
+                        <button name="action_sync_magento_fields"
+                                type="object"
+                                string="Load New Fields"
+                                class="btn-success"/>
                         <button name="action_test_mapping"
                                 type="object"
                                 string="Test Mapping"
@@ -182,6 +179,7 @@ action = env['magento.field.mapping'].with_context(
                         <group>
                             <field name="mapping_type" readonly="1"/>
                             <field name="instance_id"/>
+                            <field name="odoo_model_id" invisible="1"/>
                             <field name="odoo_field"
                                    required="1"
                                    domain="[('model_id', '=', odoo_model_id)]"

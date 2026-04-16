@@ -732,9 +732,7 @@ class SaleOrder(models.Model):
                 qty = sale_line.product_uom._compute_quantity(
                     qty, move.product_uom, rounding_method="HALF-UP"
                 )
-            move.quantity = qty
-            if qty:
-                move.picked = True
+            move.quantity_done = qty
         return True
 
     def _magento_apply_shipment(self, shipment_data):
