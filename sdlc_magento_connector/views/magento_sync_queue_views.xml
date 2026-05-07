@@ -1,0 +1,111 @@
+<odoo>
+    <data>
+
+        <record id="view_magento_sync_queue_list" model="ir.ui.view">
+            <field name="name">magento.sync.queue.list</field>
+            <field name="model">magento.sync.queue</field>
+            <field name="arch" type="xml">
+                <list string="Magento Sync Queue" create="0" import="0"
+                      decoration-success="state == 'done'"
+                      decoration-warning="state == 'failed'"
+                      decoration-info="state == 'processing'">
+                    <field name="id" string="#"/>
+                    <field name="instance_id"/>
+                    <field name="event"/>
+                    <field name="magento_event_id"/>
+                    <field name="state" widget="badge"/>
+                    <field name="retry_count"/>
+                    <field name="source"/>
+                    <field name="scheduled_at"/>
+                    <field name="processed_at"/>
+                </list>
+            </field>
+        </record>
+
+        <record id="view_magento_sync_queue_form" model="ir.ui.view">
+            <field name="name">magento.sync.queue.form</field>
+            <field name="model">magento.sync.queue</field>
+            <field name="arch" type="xml">
+                <form string="Magento Sync Queue Entry">
+                    <header>
+                        <button name="action_retry" type="object"
+                                string="Retry" class="btn-primary"
+                                invisible="state == 'done'"/>
+                        <button name="action_mark_done" type="object"
+                                string="Mark Done"
+                                invisible="state == 'done'"/>
+                        <button name="process" type="object"
+                                string="Process Now"
+                                invisible="state == 'done'"/>
+                        <field name="state" widget="statusbar"
+                               statusbar_visible="pending,processing,done,failed"/>
+                    </header>
+                    <sheet>
+                        <group>
+                            <group>
+                                <field name="instance_id"/>
+                                <field name="event"/>
+                                <field name="magento_event_id"/>
+                                <field name="source"/>
+                            </group>
+                            <group>
+                                <field name="retry_count"/>
+                                <field name="scheduled_at"/>
+                                <field name="processed_at"/>
+                            </group>
+                        </group>
+                        <notebook>
+                            <page string="Payload">
+                                <field name="payload" widget="text"/>
+                            </page>
+                            <page string="Last Error" invisible="not last_error">
+                                <field name="last_error" widget="text"/>
+                            </page>
+                        </notebook>
+                    </sheet>
+                </form>
+            </field>
+        </record>
+
+        <record id="view_magento_sync_queue_search" model="ir.ui.view">
+            <field name="name">magento.sync.queue.search</field>
+            <field name="model">magento.sync.queue</field>
+            <field name="arch" type="xml">
+                <search>
+                    <field name="event"/>
+                    <field name="magento_event_id"/>
+                    <field name="instance_id"/>
+                    <filter name="filter_pending" string="Pending"
+                            domain="[('state', '=', 'pending')]"/>
+                    <filter name="filter_failed" string="Failed"
+                            domain="[('state', '=', 'failed')]"/>
+                    <filter name="filter_done" string="Done"
+                            domain="[('state', '=', 'done')]"/>
+                    <group expand="1" string="Group By">
+                        <filter name="group_state" string="State"
+                                context="{'group_by': 'state'}"/>
+                        <filter name="group_event" string="Event"
+                                context="{'group_by': 'event'}"/>
+                        <filter name="group_instance" string="Instance"
+                                context="{'group_by': 'instance_id'}"/>
+                    </group>
+                </search>
+            </field>
+        </record>
+
+        <record id="action_magento_sync_queue" model="ir.actions.act_window">
+            <field name="name">Sync Queue</field>
+            <field name="res_model">magento.sync.queue</field>
+            <field name="view_mode">list,form</field>
+            <field name="search_view_id" ref="view_magento_sync_queue_search"/>
+            <field name="context">{'search_default_filter_pending': 1, 'search_default_filter_failed': 1}</field>
+        </record>
+
+        <menuitem id="menu_magento_sync_queue"
+                  name="Sync Queue"
+                  parent="sdlc_magento_connector.menu_magento_reports"
+                  action="action_magento_sync_queue"
+                  sequence="80"/>
+
+    </data>
+</odoo>

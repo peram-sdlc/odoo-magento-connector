@@ -13,6 +13,8 @@
         'views/magento_stock_picking_view.xml',
         'views/magento_field_mapping_views.xml',
         'views/magento_instance_views.xml',
+        'views/magento_mappings_views.xml',
+        'views/magento_sync_queue_views.xml',
         'views/account_move_form_magento.xml',
         'data/cron.xml',
     ],

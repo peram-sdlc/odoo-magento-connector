@@ -12,3 +12,7 @@ access_magento_field_mapping_user,magento.field.mapping user,model_magento_field
 access_magento_mapping_test_wizard_user,magento.mapping.test.wizard user,model_magento_mapping_test_wizard,base.group_user,1,1,1,1
 access_magento_mapping_report_user,magento.mapping.report user,model_magento_mapping_report,base.group_user,1,1,1,1
 access_magento_mapping_report_line_user,magento.mapping.report.line user,model_magento_mapping_report_line,base.group_user,1,1,1,1
+access_magento_tax_mapping_user,magento.tax.mapping user,model_magento_tax_mapping,base.group_user,1,1,1,1
+access_magento_source_mapping_user,magento.source.mapping user,model_magento_source_mapping,base.group_user,1,1,1,1
+access_magento_customer_group_user,magento.customer.group user,model_magento_customer_group,base.group_user,1,1,1,1
+access_magento_sync_queue_user,magento.sync.queue user,model_magento_sync_queue,base.group_user,1,1,1,1

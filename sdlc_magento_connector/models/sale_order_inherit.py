@@ -210,6 +210,34 @@ class SaleOrder(models.Model):
             currency = self.env["res.currency"].search([("name", "=", currency_code)], limit=1)
             if currency:
                 vals["currency_id"] = currency.id
+
+        # Customer group → pricelist + (optional) fiscal position.
+        group_id = data.get("customer_group_id")
+        if group_id is None:
+            group_id = (data.get("extension_attributes") or {}).get("customer_group_id")
+        group_mapping = (
+            self.env["magento.customer.group"].sudo().resolve(instance, group_id)
+            if instance else self.env["magento.customer.group"].sudo().browse()
+        )
+        if group_mapping and group_mapping.pricelist_id:
+            vals["pricelist_id"] = group_mapping.pricelist_id.id
+        if group_mapping and group_mapping.fiscal_position_id:
+            vals["fiscal_position_id"] = group_mapping.fiscal_position_id.id
+        else:
+            # Fallback: use product tax-class fiscal position from the first item.
+            items = data.get("items") or []
+            for item in items:
+                tax_class_id = item.get("tax_class_id") or (
+                    (item.get("extension_attributes") or {}).get("tax_class_id")
+                )
+                if not tax_class_id:
+                    continue
+                tax_mapping = self.env["magento.tax.mapping"].sudo().resolve(
+                    instance, tax_class_id, class_type="PRODUCT"
+                )
+                if tax_mapping and tax_mapping.fiscal_position_id:
+                    vals["fiscal_position_id"] = tax_mapping.fiscal_position_id.id
+                    break
         return vals
 
     @api.model
@@ -259,6 +287,17 @@ class SaleOrder(models.Model):
                 vals["product_uom"] = self.env.ref("uom.product_uom_unit").id
             except Exception:
                 pass
+
+        # Apply mapped Odoo tax when Magento provides only a tax_class_id.
+        tax_class_id = item.get("tax_class_id") or (
+            (item.get("extension_attributes") or {}).get("tax_class_id")
+        )
+        if instance and tax_class_id:
+            tax_mapping = self.env["magento.tax.mapping"].sudo().resolve(
+                instance, tax_class_id, class_type="PRODUCT"
+            )
+            if tax_mapping and tax_mapping.default_tax_id:
+                vals["tax_id"] = [(6, 0, tax_mapping.default_tax_id.ids)]
         return vals
 
     @api.model
@@ -555,7 +594,119 @@ class SaleOrder(models.Model):
                 credit_id,
                 exc,
             )
+
+        # Reverse stock so Odoo inventory mirrors the Magento refund.
+        try:
+            self._magento_restock_from_credit_memo(credit_data, move)
+        except Exception as exc:
+            _logger.warning(
+                "Magento credit memo %s restock failed: %s",
+                credit_id,
+                exc,
+            )
         return move
+
+    def _magento_restock_from_credit_memo(self, credit_data, move=None):
+        """Create an Odoo return picking that reverses the refunded quantities.
+
+        Honors instance.auto_restock_on_credit_memo. Handles partial and
+        multiple refunds (each credit memo creates one return picking).
+        """
+        self.ensure_one()
+        instance = self.magento_instance_id
+        if not instance or not getattr(instance, "auto_restock_on_credit_memo", False):
+            return False
+
+        items = credit_data.get("items") or []
+        qty_by_line = {}
+        for item in items:
+            order_item_id = item.get("order_item_id") or item.get("item_id")
+            if not order_item_id:
+                continue
+            try:
+                qty = float(
+                    item.get("qty")
+                    or item.get("qty_refunded")
+                    or item.get("qty_ordered")
+                    or 0.0
+                )
+            except (TypeError, ValueError):
+                qty = 0.0
+            if qty <= 0:
+                continue
+            order_line = self.order_line.filtered(
+                lambda l: l.magento_item_id == str(order_item_id)
+            )[:1]
+            if order_line:
+                qty_by_line[order_line.id] = qty_by_line.get(order_line.id, 0.0) + qty
+        if not qty_by_line:
+            return False
+
+        # Find the most recent done outgoing picking to reverse from.
+        picking = self.picking_ids.filtered(
+            lambda p: p.picking_type_code == "outgoing" and p.state == "done"
+        ).sorted("date_done", reverse=True)[:1]
+        if not picking:
+            return False
+
+        return_lines = []
+        for move_record in picking.move_ids:
+            sale_line = move_record.sale_line_id if "sale_line_id" in move_record._fields else False
+            if not sale_line or sale_line.id not in qty_by_line:
+                continue
+            qty = min(qty_by_line[sale_line.id], move_record.product_uom_qty or move_record.quantity or 0.0)
+            if qty <= 0:
+                continue
+            return_lines.append((0, 0, {
+                "product_id": move_record.product_id.id,
+                "quantity": qty,
+                "uom_id": move_record.product_uom.id,
+                "move_id": move_record.id,
+            }))
+            qty_by_line[sale_line.id] -= qty
+
+        if not return_lines:
+            return False
+
+        wizard = self.env["stock.return.picking"].with_context(
+            active_id=picking.id,
+            active_model="stock.picking",
+            skip_magento_sync=True,
+        ).create({
+            "picking_id": picking.id,
+            "product_return_moves": return_lines,
+        })
+        try:
+            result = wizard.action_create_returns()
+        except Exception as exc:
+            _logger.warning(
+                "Magento credit memo restock wizard failed for order %s: %s",
+                self.name,
+                exc,
+            )
+            return False
+        return_picking_id = (result or {}).get("res_id") if isinstance(result, dict) else False
+        if not return_picking_id:
+            return False
+        return_picking = self.env["stock.picking"].browse(return_picking_id)
+        # Auto-validate the return so stock is restored without a second click.
+        try:
+            for ml in return_picking.move_ids:
+                ml.quantity = ml.product_uom_qty
+            return_picking.with_context(skip_magento_sync=True).button_validate()
+        except Exception as exc:
+            _logger.warning(
+                "Magento credit memo restock validate failed for order %s: %s",
+                self.name,
+                exc,
+            )
+        if move:
+            move.with_context(skip_magento_sync=True).message_post(
+                body=_(
+                    "Stock reversed via return picking %s (auto-restock from Magento credit memo)."
+                ) % (return_picking.name or return_picking.id)
+            )
+        return return_picking
 
     def _magento_update_credit_memo_amounts(self, move, credit_data):
         """Persist Magento credit memo totals on account.move for display consistency."""

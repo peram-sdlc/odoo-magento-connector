@@ -1,0 +1,236 @@
+<odoo>
+    <data>
+
+        <!-- ==================== TAX MAPPING ==================== -->
+        <record id="view_magento_tax_mapping_list" model="ir.ui.view">
+            <field name="name">magento.tax.mapping.list</field>
+            <field name="model">magento.tax.mapping</field>
+            <field name="arch" type="xml">
+                <list string="Magento Tax Class Mapping" import="0">
+                    <field name="instance_id"/>
+                    <field name="magento_tax_class_id"/>
+                    <field name="magento_class_name"/>
+                    <field name="magento_class_type"/>
+                    <field name="fiscal_position_id"/>
+                    <field name="default_tax_id"/>
+                    <field name="active" widget="boolean_toggle"/>
+                </list>
+            </field>
+        </record>
+
+        <record id="view_magento_tax_mapping_form" model="ir.ui.view">
+            <field name="name">magento.tax.mapping.form</field>
+            <field name="model">magento.tax.mapping</field>
+            <field name="arch" type="xml">
+                <form string="Magento Tax Class Mapping">
+                    <sheet>
+                        <group>
+                            <group>
+                                <field name="instance_id"/>
+                                <field name="magento_tax_class_id"/>
+                                <field name="magento_class_name"/>
+                                <field name="magento_class_type"/>
+                            </group>
+                            <group>
+                                <field name="fiscal_position_id"/>
+                                <field name="default_tax_id"/>
+                                <field name="active" widget="boolean_toggle"/>
+                            </group>
+                        </group>
+                    </sheet>
+                </form>
+            </field>
+        </record>
+
+        <record id="action_magento_tax_mapping" model="ir.actions.act_window">
+            <field name="name">Tax Class Mappings</field>
+            <field name="res_model">magento.tax.mapping</field>
+            <field name="view_mode">list,form</field>
+        </record>
+
+        <!-- ==================== SOURCE MAPPING ==================== -->
+        <record id="view_magento_source_mapping_list" model="ir.ui.view">
+            <field name="name">magento.source.mapping.list</field>
+            <field name="model">magento.source.mapping</field>
+            <field name="arch" type="xml">
+                <list string="Magento MSI Source Mapping" import="0">
+                    <field name="instance_id"/>
+                    <field name="source_code"/>
+                    <field name="source_name"/>
+                    <field name="warehouse_id"/>
+                    <field name="is_default"/>
+                    <field name="enabled" widget="boolean_toggle"/>
+                </list>
+            </field>
+        </record>
+
+        <record id="view_magento_source_mapping_form" model="ir.ui.view">
+            <field name="name">magento.source.mapping.form</field>
+            <field name="model">magento.source.mapping</field>
+            <field name="arch" type="xml">
+                <form string="Magento MSI Source Mapping">
+                    <sheet>
+                        <group>
+                            <group>
+                                <field name="instance_id"/>
+                                <field name="source_code"/>
+                                <field name="source_name"/>
+                                <field name="is_default"/>
+                            </group>
+                            <group>
+                                <field name="warehouse_id"/>
+                                <field name="enabled" widget="boolean_toggle"/>
+                            </group>
+                        </group>
+                    </sheet>
+                </form>
+            </field>
+        </record>
+
+        <record id="action_magento_source_mapping" model="ir.actions.act_window">
+            <field name="name">MSI Source Mappings</field>
+            <field name="res_model">magento.source.mapping</field>
+            <field name="view_mode">list,form</field>
+        </record>
+
+        <!-- ==================== CUSTOMER GROUP ==================== -->
+        <record id="view_magento_customer_group_list" model="ir.ui.view">
+            <field name="name">magento.customer.group.list</field>
+            <field name="model">magento.customer.group</field>
+            <field name="arch" type="xml">
+                <list string="Magento Customer Group Mapping" import="0">
+                    <field name="instance_id"/>
+                    <field name="magento_group_id"/>
+                    <field name="magento_group_name"/>
+                    <field name="pricelist_id"/>
+                    <field name="fiscal_position_id"/>
+                    <field name="active" widget="boolean_toggle"/>
+                </list>
+            </field>
+        </record>
+
+        <record id="view_magento_customer_group_form" model="ir.ui.view">
+            <field name="name">magento.customer.group.form</field>
+            <field name="model">magento.customer.group</field>
+            <field name="arch" type="xml">
+                <form string="Magento Customer Group Mapping">
+                    <sheet>
+                        <group>
+                            <group>
+                                <field name="instance_id"/>
+                                <field name="magento_group_id"/>
+                                <field name="magento_group_name"/>
+                                <field name="magento_tax_class_id"/>
+                            </group>
+                            <group>
+                                <field name="pricelist_id"/>
+                                <field name="fiscal_position_id"/>
+                                <field name="active" widget="boolean_toggle"/>
+                            </group>
+                        </group>
+                    </sheet>
+                </form>
+            </field>
+        </record>
+
+        <record id="action_magento_customer_group" model="ir.actions.act_window">
+            <field name="name">Customer Group Mappings</field>
+            <field name="res_model">magento.customer.group</field>
+            <field name="view_mode">list,form</field>
+        </record>
+
+        <!-- ==================== INSTANCE FORM EXTENSION ==================== -->
+        <record id="view_magento_instance_form_inherit_mappings" model="ir.ui.view">
+            <field name="name">magento.instance.form.inherit.mappings</field>
+            <field name="model">magento.instance</field>
+            <field name="inherit_id" ref="sdlc_magento_connector.view_magento_instance_form"/>
+            <field name="arch" type="xml">
+                <xpath expr="//header" position="inside">
+                    <button name="action_sync_tax_classes" type="object" string="Sync Tax Classes"/>
+                    <button name="action_sync_inventory_sources" type="object" string="Sync MSI Sources"
+                            invisible="not msi_enabled"/>
+                    <button name="action_sync_customer_groups" type="object" string="Sync Customer Groups"/>
+                </xpath>
+
+                <xpath expr="//notebook" position="inside">
+                    <page string="Real-time / Webhooks">
+                        <group>
+                            <group>
+                                <field name="webhook_enabled" widget="boolean_toggle"/>
+                                <field name="webhook_secret" password="True"
+                                       invisible="not webhook_enabled"/>
+                                <button name="action_generate_webhook_secret"
+                                        type="object" string="Generate Secret"
+                                        class="btn-secondary"
+                                        invisible="not webhook_enabled"/>
+                            </group>
+                            <group>
+                                <label for="id" string="Webhook URL"/>
+                                <div>
+                                    <span>POST <code>/magento/webhook/<field name="id" readonly="1"/>/&lt;event&gt;</code></span>
+                                    <br/>
+                                    <span class="text-muted">Configure on Magento side via the SDLC_OdooSync extension. Events: order.placed, order.updated, invoice.created, creditmemo.created, shipment.created, stock.updated, customer.created, customer.updated.</span>
+                                </div>
+                            </group>
+                        </group>
+                    </page>
+                    <page string="Tax Classes">
+                        <field name="tax_mapping_ids">
+                            <list editable="bottom">
+                                <field name="magento_tax_class_id"/>
+                                <field name="magento_class_name"/>
+                                <field name="magento_class_type"/>
+                                <field name="fiscal_position_id"/>
+                                <field name="default_tax_id"/>
+                                <field name="active" widget="boolean_toggle"/>
+                            </list>
+                        </field>
+                    </page>
+                    <page string="MSI Sources" invisible="not msi_enabled">
+                        <group>
+                            <field name="msi_enabled" widget="boolean_toggle"/>
+                        </group>
+                        <field name="source_mapping_ids">
+                            <list editable="bottom">
+                                <field name="source_code"/>
+                                <field name="source_name"/>
+                                <field name="warehouse_id"/>
+                                <field name="is_default"/>
+                                <field name="enabled" widget="boolean_toggle"/>
+                            </list>
+                        </field>
+                    </page>
+                    <page string="Customer Groups">
+                        <field name="customer_group_ids">
+                            <list editable="bottom">
+                                <field name="magento_group_id"/>
+                                <field name="magento_group_name"/>
+                                <field name="magento_tax_class_id"/>
+                                <field name="pricelist_id"/>
+                                <field name="fiscal_position_id"/>
+                                <field name="active" widget="boolean_toggle"/>
+                            </list>
+                        </field>
+                    </page>
+                    <page string="Credit Memos">
+                        <group>
+                            <field name="auto_restock_on_credit_memo" widget="boolean_toggle"/>
+                        </group>
+                    </page>
+                </xpath>
+            </field>
+        </record>
+
+        <!-- ==================== MENUS ==================== -->
+        <menuitem id="menu_magento_mapping_tax" name="Tax Class Mapping"
+                  parent="sdlc_magento_connector.menu_magento_mapping"
+                  action="action_magento_tax_mapping" sequence="40"/>
+        <menuitem id="menu_magento_mapping_sources" name="MSI Source Mapping"
+                  parent="sdlc_magento_connector.menu_magento_mapping"
+                  action="action_magento_source_mapping" sequence="50"/>
+        <menuitem id="menu_magento_mapping_customer_groups" name="Customer Group Mapping"
+                  parent="sdlc_magento_connector.menu_magento_mapping"
+                  action="action_magento_customer_group" sequence="60"/>
+
+    </data>
+</odoo>

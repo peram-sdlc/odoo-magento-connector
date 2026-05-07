@@ -596,3 +596,65 @@ class MagentoAPI:
     def get_country(self, country_code):
         safe_code = quote(str(country_code or "").strip(), safe="")
         return self._get(f"/rest/V1/directory/countries/{safe_code}")
+
+    # ---------------- Tax classes ----------------
+    def get_tax_classes(self):
+        # Magento returns CUSTOMER and PRODUCT classes via taxClasses/search.
+        params = {
+            "searchCriteria[filter_groups][0][filters][0][field]": "class_type",
+            "searchCriteria[filter_groups][0][filters][0][value]": "PRODUCT,CUSTOMER",
+            "searchCriteria[filter_groups][0][filters][0][condition_type]": "in",
+        }
+        try:
+            payload = self._get("/rest/V1/taxClasses/search", params=params)
+        except requests.exceptions.HTTPError:
+            payload = self._get("/rest/V1/taxClasses/search", params={"searchCriteria": ""})
+        if isinstance(payload, dict):
+            return payload.get("items", []) or []
+        return []
+
+    # ---------------- MSI / Inventory ----------------
+    def get_inventory_sources(self):
+        payload = self._get("/rest/V1/inventory/sources", params={"searchCriteria": ""})
+        if isinstance(payload, dict):
+            return payload.get("items", []) or []
+        return []
+
+    def get_inventory_stocks(self):
+        payload = self._get("/rest/V1/inventory/stocks", params={"searchCriteria": ""})
+        if isinstance(payload, dict):
+            return payload.get("items", []) or []
+        return []
+
+    def get_source_items(self, sku=None, source_code=None):
+        params = {"searchCriteria": ""}
+        idx = 0
+        if sku:
+            params[f"searchCriteria[filter_groups][{idx}][filters][0][field]"] = "sku"
+            params[f"searchCriteria[filter_groups][{idx}][filters][0][value]"] = sku
+            params[f"searchCriteria[filter_groups][{idx}][filters][0][condition_type]"] = "eq"
+            idx += 1
+        if source_code:
+            params[f"searchCriteria[filter_groups][{idx}][filters][0][field]"] = "source_code"
+            params[f"searchCriteria[filter_groups][{idx}][filters][0][value]"] = source_code
+            params[f"searchCriteria[filter_groups][{idx}][filters][0][condition_type]"] = "eq"
+        payload = self._get("/rest/V1/inventory/source-items", params=params)
+        if isinstance(payload, dict):
+            return payload.get("items", []) or []
+        return []
+
+    def update_source_items(self, source_items):
+        """source_items: list of {sku, source_code, quantity, status}."""
+        if not source_items:
+            return {}
+        return self._post(
+            "/rest/V1/inventory/source-items",
+            {"sourceItems": source_items},
+        )
+
+    # ---------------- Customer Groups ----------------
+    def get_customer_groups(self):
+        payload = self._get("/rest/V1/customerGroups/search", params={"searchCriteria": ""})
+        if isinstance(payload, dict):
+            return payload.get("items", []) or []
+        return []

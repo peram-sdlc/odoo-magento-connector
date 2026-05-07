@@ -1,4 +1,5 @@
 from . import magento_instance
+from . import magento_instance_extend
 from . import magento_attribute_set
 from . import magento_category
 from . import magento_product
@@ -10,3 +11,7 @@ from . import stock_picking_inherit
 from . import magento_customer
 from . import magento_field_mapping
 from . import magento_sync_report
+from . import magento_tax_mapping
+from . import magento_source_mapping
+from . import magento_customer_group_mapping
+from . import magento_sync_queue
